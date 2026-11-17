@@ -1,0 +1,534 @@
+.grocery {
+  --brand: #2e7d32;
+  --brand-dark: #005005;
+  --brand-soft: #e8f0e8;
+  --line: #d7e3d7;
+  --page: #f5f7f5;
+  --header-line: #e6eee6;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--page);
+  color: #1a1a1a;
+}
+
+.grocery[data-category='textile'] {
+  --brand: #3949ab;
+  --brand-dark: #1a237e;
+  --brand-soft: #e8eaf6;
+  --line: #d5d8ea;
+  --page: #f3f4f8;
+  --header-line: #e4e6f0;
+}
+
+.grocery[data-category='pharmacy'] {
+  --brand: #0d6e6e;
+  --brand-dark: #004d4d;
+  --brand-soft: #e0f2f1;
+  --line: #c5ddd9;
+  --page: #f4f8fa;
+  --header-line: #d5e6ea;
+}
+
+.grocery[data-category='bakery'],
+.grocery[data-category='restaurant'] {
+  --brand: #9e2a2b;
+  --brand-dark: #6e1d1e;
+  --brand-soft: #f5e4e4;
+  --line: #e6d0d0;
+  --page: #faf6f1;
+  --header-line: #eadfd6;
+}
+
+.grocery[data-category='retail'] {
+  --brand: #1a56a8;
+  --brand-dark: #0d3d7a;
+  --brand-soft: #e3f2fd;
+  --line: #c9dcf0;
+  --page: #f6f9fc;
+  --header-line: #dce6f0;
+}
+
+.grocery .sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.grocery button,
+.grocery input,
+.grocery select {
+  font: inherit;
+}
+
+.grocery-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+  background: #fff;
+  border-bottom: 1px solid var(--header-line);
+}
+
+.grocery-logo {
+  width: 118px;
+  height: auto;
+  display: block;
+}
+
+.grocery-shop {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.grocery-shop strong {
+  font-size: 0.92rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 34vw;
+}
+
+.grocery-shop select {
+  max-width: 42vw;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px 10px;
+}
+
+.grocery-link,
+.grocery-close {
+  background: transparent;
+  color: var(--brand);
+  border: 0;
+  padding: 8px 4px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.grocery-search {
+  display: block;
+  padding: 12px 14px 8px;
+}
+
+.grocery-search input {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 14px;
+  min-height: 48px;
+  padding: 0 14px;
+}
+
+.grocery-search input:focus {
+  outline: 2px solid var(--brand);
+  border-color: transparent;
+}
+
+.grocery-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 0 14px 8px;
+  scrollbar-width: none;
+}
+
+.grocery-chips button {
+  flex: none;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: #1a1a1a;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-weight: 650;
+}
+
+.grocery-chips button.on {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.grocery-grid {
+  flex: 1;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-content: start;
+  padding: 8px 14px 96px;
+}
+
+.grocery-empty,
+.grocery-status,
+.grocery-banner {
+  margin: 0;
+}
+
+.grocery-empty,
+.grocery-status {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: #616161;
+  padding: 48px 12px;
+}
+
+.grocery-banner {
+  grid-column: 1 / -1;
+  color: #b71c1c;
+  background: #ffebee;
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.g-card {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  min-height: 168px;
+  padding: 0;
+  overflow: hidden;
+  text-align: left;
+  background: #fff;
+  border: 0;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(26, 26, 26, 0.08);
+}
+
+.g-card:active {
+  transform: scale(0.98);
+}
+
+.g-card.off {
+  opacity: 0.55;
+}
+
+.g-art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 92px;
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+}
+
+.g-art svg {
+  width: 42px;
+  height: 42px;
+  opacity: 0.55;
+}
+
+.g-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  max-width: calc(100% - 12px);
+  padding: 3px 6px;
+  border-radius: 6px;
+  color: #fff;
+  background: #f57c00;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.g-badge.out {
+  background: #d32f2f;
+}
+
+.g-meta {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px 10px;
+}
+
+.g-name {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.g-price {
+  color: var(--brand);
+  font-weight: 800;
+  font-size: 0.92rem;
+}
+
+.grocery-order {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--brand);
+  color: #fff;
+  font-weight: 750;
+  box-shadow: 0 10px 24px rgba(46, 125, 50, 0.28);
+}
+
+.grocery-order svg {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+
+.grocery-order:disabled {
+  opacity: 0.85;
+  cursor: default;
+}
+
+.g-count {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--brand);
+  font-size: 0.78rem;
+  line-height: 22px;
+}
+
+.g-sheet-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(18, 23, 18, 0.45);
+}
+
+.g-sheet {
+  width: min(640px, 100%);
+  margin: 0 auto;
+  max-height: min(92vh, 820px);
+  overflow: auto;
+  display: grid;
+  gap: 14px;
+  padding: 14px 16px calc(16px + env(safe-area-inset-bottom));
+  background: #fff;
+  border-radius: 20px 20px 0 0;
+}
+
+.g-sheet-head,
+.g-line,
+.g-due {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.g-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.g-line-name {
+  margin: 0;
+  font-weight: 700;
+}
+
+.g-line-meta,
+.g-tax {
+  margin: 0;
+  color: #616161;
+}
+
+.g-stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.g-stepper button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+  font-size: 1.2rem;
+}
+
+.g-foot {
+  display: grid;
+  gap: 8px;
+}
+
+.g-sheet label,
+.g-foot label,
+.g-weigh label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.g-sheet input,
+.g-foot input,
+.g-weigh input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  min-height: 46px;
+  padding: 0 12px;
+}
+
+.g-pay {
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--brand);
+  color: #fff;
+  font-weight: 800;
+}
+
+.g-pay:disabled {
+  opacity: 0.45;
+}
+
+.g-methods {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.g-methods button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--brand-soft);
+  font-weight: 750;
+}
+
+.g-methods button.on {
+  background: var(--brand);
+  color: #fff;
+}
+
+.category-pick {
+  height: 100%;
+  overflow: auto;
+  padding: calc(24px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom));
+  background: #f4f6f8;
+}
+
+.category-pick header {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.category-pick header p {
+  color: #616161;
+}
+
+.category-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.category-card {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 14px 10px 12px;
+  border: 1px solid #e6eaf0;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.category-card img {
+  width: 100%;
+  height: 42px;
+  object-fit: contain;
+}
+
+.category-card span {
+  font-weight: 750;
+}
+
+.category-pick .grocery-link {
+  display: block;
+  margin: 18px auto 0;
+}
+
+.g-error {
+  margin: 0;
+  color: #b71c1c;
+}
+
+.g-ok {
+  margin: 0;
+  color: var(--brand);
+  font-weight: 700;
+}
+
+.g-done h2 {
+  margin: 4px 0 0;
+  font-size: 1.5rem;
+}
+
+.g-weigh {
+  display: grid;
+  gap: 12px;
+}
+
+.grocery-gate {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: var(--page);
+}
+
+.grocery-gate section {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 12px;
+  background: #fff;
+  border-radius: 20px;
+  padding: 22px;
+}
+
+.grocery-gate .g-pay {
+  text-align: left;
+}
+
+@media (max-width: 520px) {
+  .grocery-logo {
+    width: 96px;
+  }
+
+  .grocery-link {
+    font-size: 0.8rem;
+    padding: 6px 2px;
+  }
+}
+
+@media (min-width: 800px) {
+  .grocery-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
