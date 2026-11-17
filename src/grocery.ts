@@ -239,10 +239,15 @@ export async function loadGroceryStores(client: SupabaseClient): Promise<Grocery
   return rows.filter((row) => row.category.toLowerCase() !== 'archived')
 }
 
+export function shopTitle(category: ShopCategory): string {
+  const label = SHOP_CATEGORIES.find((item) => item.id === category)?.label ?? 'Shop'
+  return `POS ${label}`
+}
+
 export async function setStoreCategory(client: SupabaseClient, storeId: string, category: ShopCategory): Promise<void> {
   const { error } = await client
     .from('stores')
-    .update({ category, updated_at: new Date().toISOString() })
+    .update({ category, name: shopTitle(category), updated_at: new Date().toISOString() })
     .eq('id', storeId)
   if (error) throw new Error(error.message)
 }

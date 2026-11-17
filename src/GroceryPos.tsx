@@ -19,6 +19,7 @@ import {
   round3,
   saleTotals,
   SHOP_CATEGORIES,
+  shopTitle,
   setStoreCategory,
   type CartLine,
   type GroceryCategory,
@@ -240,14 +241,17 @@ export function GroceryPos({
                 setQuery('')
               }}
             >
-              {stores.map((row) => (
-                <option key={row.id} value={row.id}>
-                  {row.name}
-                </option>
-              ))}
+              {stores.map((row) => {
+                const known = SHOP_CATEGORIES.find((item) => item.id === row.category)
+                return (
+                  <option key={row.id} value={row.id}>
+                    {known ? shopTitle(known.id) : row.name}
+                  </option>
+                )
+              })}
             </select>
           ) : (
-            <strong>{store.name}</strong>
+            <strong>{shopTitle(category)}</strong>
           )}
           <button type="button" className="grocery-link" onClick={onOpenPortal}>
             Portal
@@ -489,13 +493,12 @@ export function CategoryPick({
   const [error, setError] = useState('')
 
   async function choose(category: ShopCategory) {
-    const label = SHOP_CATEGORIES.find((item) => item.id === category)?.label ?? 'POS'
     setBusy(category)
     setError('')
     try {
       const rows = await loadGroceryStores(client)
       if (rows.length === 0) {
-        await createGroceryShop(client, `POS ${label}`, category)
+        await createGroceryShop(client, shopTitle(category), category)
       } else {
         const saved = localStorage.getItem(STORE_PICK) || readRememberedStore(true)
         const store = rows.find((row) => row.id === saved) ?? rows[0]
