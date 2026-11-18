@@ -162,17 +162,148 @@ function NavButton({
   current,
   id,
   label,
+  icon,
   onOpen,
 }: {
   current: Section
   id: Section
   label: string
+  icon: string
   onOpen: (section: Section) => void
 }) {
   return (
     <button type="button" className={current === id ? 'on' : ''} onClick={() => onOpen(id)}>
+      <NavGlyph name={icon} />
       {label}
     </button>
+  )
+}
+
+function NavGlyph({ name }: { name: string }) {
+  const common = { viewBox: '0 0 24 24', 'aria-hidden': true as const }
+  if (name === 'pos') {
+    return (
+      <svg {...common}>
+        <path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v8H2V6a2 2 0 0 1 2-2zm-2 12h20v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-2zm4 1h2v2H6v-2z" />
+      </svg>
+    )
+  }
+  if (name === 'products') {
+    return (
+      <svg {...common}>
+        <path fill="currentColor" d="M4 7h16v12H4V7zm2-3h12l1 2H5l1-2zm2 6v2h8V10H8z" />
+      </svg>
+    )
+  }
+  if (name === 'buy') {
+    return (
+      <svg {...common}>
+        <path fill="currentColor" d="M7 4h10l1 3h3v2h-1.2l-1.4 9H5.6L4.2 9H3V7h3L7 4zm1.2 2-.7 2h9l-.7-2H8.2zM7 11v6h10v-6H7z" />
+      </svg>
+    )
+  }
+  if (name === 'orders') {
+    return (
+      <svg {...common}>
+        <path fill="currentColor" d="M6 2h9l5 5v15H6V2zm8 1.5V8h4.5L14 3.5zM8 11h8v2H8v-2zm0 4h8v2H8v-2z" />
+      </svg>
+    )
+  }
+  if (name === 'customers') {
+    return (
+      <svg {...common}>
+        <path fill="currentColor" d="M9 11a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7zm6 1a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20c0-3.3 2.7-5 7-5s7 1.7 7 5v1H2v-1zm14 .5c.1-2.2 1.2-3.7 3.2-4.4 1.6.6 2.8 1.8 2.8 3.9V21h-6v-.5z" />
+      </svg>
+    )
+  }
+  if (name === 'reports') {
+    return (
+      <svg {...common}>
+        <path fill="currentColor" d="M4 19h16v2H4v-2zM6 10h3v7H6v-7zm5-6h3v13h-3V4zm5 4h3v9h-3V8z" />
+      </svg>
+    )
+  }
+  if (name === 'assistant') {
+    return (
+      <svg {...common}>
+        <path fill="currentColor" d="m12 2 1.6 4.8L18.5 8.5 13.6 10 12 15l-1.6-5L6.5 8.5 11 6.8 12 2zm6 10 .8 2.4 2.4.8-2.4.8L18 18l-.8-2.4-2.4-.8 2.4-.8L18 12zM6 14l.9 2.6L9.5 17.5 6.9 18.4 6 21l-.9-2.6L2.5 17.5l2.6-.9L6 14z" />
+      </svg>
+    )
+  }
+  if (name === 'contact') {
+    return (
+      <svg {...common}>
+        <path fill="currentColor" d="M12 2a8 8 0 0 0-8 8v1H3v5h3v-6a6 6 0 1 1 12 0v6h3v-5h-1v-1a8 8 0 0 0-8-8zm-5 11v5a2 2 0 0 0 2 2h1v-7H7zm8 7h1a2 2 0 0 0 2-2v-5h-3v7z" />
+      </svg>
+    )
+  }
+  if (name === 'switch') {
+    return (
+      <svg {...common}>
+        <path fill="currentColor" d="M10 7V4L4 10l6 6v-3h8v-6H10zm4 10v3l6-6-6-6v3H6v6h8z" />
+      </svg>
+    )
+  }
+  return (
+    <svg {...common}>
+      <path fill="currentColor" d="M19.4 13a7.8 7.8 0 0 0 .1-1 7.8 7.8 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3h-4l-.3 2.9a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4L6.6 11a7.8 7.8 0 0 0-.1 1 7.8 7.8 0 0 0 .1 1l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 0 0 1.7 1L11 21h4l.3-2.9a7.4 7.4 0 0 0 1.7-1l2.4 1 2-3.4-2-1.7zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z" />
+    </svg>
+  )
+}
+
+function AssistantPane({ client, store }: { client: SupabaseClient; store: GroceryStore }) {
+  const [answer, setAnswer] = useState('')
+  const [error, setError] = useState('')
+
+  async function ask() {
+    setError('')
+    const range = periodWindow('today', store.timezone, '', '')
+    if (!range) return
+    const [summary, low] = await Promise.all([
+      loadPeriodSummary(client, store.id, range, store.timezone),
+      loadLowStock(client, store.id),
+    ])
+    setAnswer(
+      `Today's sales are ${money(summary.sales, store.currencySymbol)} from ${summary.completedCount} completed orders. Profit is ${money(summary.profit, store.currencySymbol)}. ${low.length} products are at or below the reorder point.`,
+    )
+  }
+
+  return (
+    <Pane title="AI Assistant">
+      <p>Ask about today's sales, profit, and stock that needs reordering.</p>
+      {error ? <p className="g-error">{error}</p> : null}
+      <button
+        type="button"
+        className="g-pay"
+        onClick={() => {
+          ask().catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not answer'))
+        }}
+      >
+        How is the shop today?
+      </button>
+      {answer ? <p className="desk-answer">{answer}</p> : null}
+    </Pane>
+  )
+}
+
+function ContactPane() {
+  return (
+    <Pane title="Contact Us">
+      <ul className="desk-list">
+        <li>
+          <strong>Phone</strong>
+          <span>+94 71 145 0490</span>
+        </li>
+        <li>
+          <strong>Email</strong>
+          <span>contact@menturaglobal.com</span>
+        </li>
+        <li>
+          <strong>Website</strong>
+          <span>www.menturaglobal.com</span>
+        </li>
+      </ul>
+    </Pane>
   )
 }
 

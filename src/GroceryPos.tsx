@@ -29,15 +29,17 @@ import {
   type PayMethod,
   type ShopCategory,
 } from './grocery'
-import { loadDeskCustomers, type DeskCustomer } from './groceryDesk'
+import { loadPeriodSummary } from './data'
+import { loadDeskCustomers, loadOpenShift, openDeskShift, recordCashMove, type DeskCustomer, type DeskShift } from './groceryDesk'
 import { readRememberedStore, writeRememberedStore } from './prefs'
+import { periodWindow } from './time'
 import './grocery.css'
 
 type HeldBill = { id: string; at: string; cart: CartLine[]; discount: string }
 
 const HELD_KEY = 'mentura-held-bills'
 
-type Sheet = 'cart' | 'pay' | 'done' | 'weigh' | 'recall' | null
+type Sheet = 'cart' | 'pay' | 'done' | 'weigh' | 'recall' | 'shift' | 'cash' | null
 
 const STORE_PICK = 'mentura-grocery-store'
 
@@ -78,6 +80,13 @@ export function GroceryPos({
   const [customerId, setCustomerId] = useState('')
   const [priceFor, setPriceFor] = useState<string | null>(null)
   const [priceDraft, setPriceDraft] = useState('')
+  const [ticket, setTicket] = useState(ticketStamp)
+  const [shift, setShift] = useState<DeskShift | null>(null)
+  const [todaySales, setTodaySales] = useState(0)
+  const [openingCash, setOpeningCash] = useState('0')
+  const [cashKind, setCashKind] = useState<'paid_in' | 'paid_out'>('paid_in')
+  const [cashAmount, setCashAmount] = useState('')
+  const [showCustomers, setShowCustomers] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -126,6 +135,36 @@ export function GroceryPos({
     () => saleTotals(cart, store?.taxRate ?? 0, discountValue),
     [cart, store?.taxRate, discountValue],
   )
+  useEffect(() => {
+    if (!docked || !store) return
+    let active = true
+    loadOpenShift(client, store.id)
+      .then((row) => {
+        if (active) setShift(row)
+      })
+      .catch(() => {
+        if (active) setShift(null)
+      })
+    loadDeskCustomers(client, store.id)
+      .then((rows) => {
+        if (active) setCustomers(rows)
+      })
+      .catch(() => {
+        if (active) setCustomers([])
+      })
+    const range = periodWindow('today', store.timezone, '', '')
+    if (range) {
+      loadPeriodSummary(client, store.id, range, store.timezone)
+        .then((summary) => {
+          if (active) setTodaySales(summary.sales)
+        })
+        .catch(() => undefined)
+    }
+    return () => {
+      active = false
+    }
+  }, [docked, client, store, receipt])
+
   const itemCount = cart.reduce((sum, line) => sum + (line.qty > 0 ? 1 : 0), 0)
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -198,6 +237,7 @@ export function GroceryPos({
       setReceipt(sale)
       setCart([])
       setDiscount('0')
+      setTicket(ticketStamp())
       setSheet('done')
       setTendered('')
       const fresh = await loadGroceryCatalog(client, store.id)
@@ -241,8 +281,44 @@ export function GroceryPos({
   const logoUrl = CATEGORY_LOGOS[category]
   const categoryLabel = SHOP_CATEGORIES.find((item) => item.id === category)?.label ?? 'Grocery'
 
+  const customerName = customers.find((row) => row.localId === customerId)?.name
+  const orderLines = (
+    <ul className="g-lines">
+      {cart.map((line) => (
+        <li key={line.product.id} className="g-line">
+          <div>
+            <p className="g-line-name">{line.product.name}</p>
+            <p className="g-line-meta">{money(lineSubtotal(linePrice(line), line.qty), symbol)}</p>
+          </div>
+          <div className="g-stepper">
+            <button type="button" aria-label={`Decrease ${line.product.name}`} onClick={() => changeQty(line.product.id, -qtyStep(line.product.unit))}>
+              −
+            </button>
+            <span>{qtyLabel(line.qty)}</span>
+            <button type="button" aria-label={`Increase ${line.product.name}`} onClick={() => changeQty(line.product.id, qtyStep(line.product.unit))}>
+              +
+            </button>
+          </div>
+        </li>
+      ))}
+    </ul>
+  )
+
+  function holdBill() {
+    if (cart.length === 0) return
+    const bill: HeldBill = { id: crypto.randomUUID(), at: new Date().toISOString(), cart, discount }
+    const next = [bill, ...held].slice(0, 12)
+    setHeld(next)
+    writeHeld(next)
+    setCart([])
+    setDiscount('0')
+    setTicket(ticketStamp())
+    setSheet(null)
+  }
+
   return (
-    <div className={docked ? 'grocery grocery-docked' : 'grocery'} data-category={category}>
+    <div className={docked ? 'grocery grocery-docked pos-shell' : 'grocery'} data-category={category}>
+      {docked ? null : (
       <header className="grocery-top">
         <img className="grocery-logo" src={logoUrl} alt={`POS ${categoryLabel}`} />
         <div className="grocery-shop">
@@ -277,18 +353,22 @@ export function GroceryPos({
           </button>
         </div>
       </header>
+      )}
 
+      <div className={docked ? 'pos-split' : 'pos-stack'}>
+      <div className="pos-catalog">
       <label className="grocery-search">
         <span className="sr">Search products or scan a barcode</span>
         <input
           value={query}
-          placeholder="Search products or scan barcode…"
+          placeholder="Search products or scan barcode..."
           enterKeyHint="search"
           autoCapitalize="off"
           autoCorrect="off"
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => onSearchKey(event.key)}
         />
+        <span className="scan-mark" aria-hidden="true">⌗</span>
       </label>
 
       {categories.length > 0 ? (
@@ -312,7 +392,13 @@ export function GroceryPos({
       <div className="grocery-grid">
         {loadError ? <p className="grocery-banner">{loadError}</p> : null}
         {error && sheet !== 'pay' ? <p className="grocery-banner">{error}</p> : null}
-        {visible.length === 0 ? <p className="grocery-empty">No products found</p> : null}
+        {visible.length === 0 ? (
+          <div className="pos-empty">
+            <span className="pos-empty-icon" aria-hidden="true">▢</span>
+            <strong>No products found</strong>
+            <p>Try a different search or category</p>
+          </div>
+        ) : null}
         {visible.map((product) => {
           const out = product.stockQty <= 0
           const low = !out && product.reorderPoint > 0 && product.stockQty <= product.reorderPoint
@@ -341,12 +427,94 @@ export function GroceryPos({
           )
         })}
       </div>
+      </div>
+      {docked ? (
+        <aside className="pos-order">
+          <header className="pos-order-head">
+            <h2>Current Order</h2>
+            <p>{ticket}</p>
+          </header>
+          <div className="pos-order-actions">
+            <button type="button" disabled={cart.length === 0} onClick={holdBill}>Hold</button>
+            <button type="button" disabled={held.length === 0} onClick={() => setSheet('recall')}>Recall</button>
+            <button
+              type="button"
+              disabled={cart.length === 0}
+              onClick={() => {
+                setCart([])
+                setDiscount('0')
+                setTicket(ticketStamp())
+              }}
+            >
+              Clear
+            </button>
+          </div>
+          {shift ? null : (
+            <div className="pos-shift-note">
+              <p>Open a shift before accepting payment.</p>
+              <button type="button" onClick={() => setSheet('shift')}>Open shift</button>
+            </div>
+          )}
+          <div className="pos-cash-links">
+            <button type="button" onClick={() => { setCashKind('paid_in'); setSheet('cash') }}>Paid In</button>
+            <button type="button" onClick={() => { setCashKind('paid_out'); setSheet('cash') }}>Paid Out</button>
+            <button type="button" onClick={() => setSheet('shift')}>Drawer</button>
+          </div>
+          <div className="pos-order-body">
+            {cart.length === 0 ? (
+              <div className="pos-empty">
+                <span className="pos-empty-icon" aria-hidden="true">🛒</span>
+                <strong>Cart is empty</strong>
+                <p>Tap products on the left to add them</p>
+              </div>
+            ) : orderLines}
+          </div>
+          <div className="pos-totals">
+            <p><span>Subtotal</span><strong>{money(totals.subtotal, symbol)}</strong></p>
+            <label>
+              <span>Discount</span>
+              <input aria-label="Discount" inputMode="decimal" value={discount} onChange={(event) => setDiscount(event.target.value)} />
+            </label>
+            <p><span>Tax ({Math.round(store.taxRate * 100)}%)</span><strong>{money(totals.tax, symbol)}</strong></p>
+            <p className="pos-grand"><span>TOTAL</span><strong>{money(totals.total, symbol)}</strong></p>
+          </div>
+          <button type="button" className="pos-customer" onClick={() => setShowCustomers((open) => !open)}>
+            {customerName || 'Walk-in Customer'}
+          </button>
+          {showCustomers ? (
+            <select aria-label="Customer" value={customerId} onChange={(event) => setCustomerId(event.target.value)}>
+              <option value="">Walk-in Customer</option>
+              {customers.map((customer) => (
+                <option key={customer.localId} value={customer.localId}>{customer.name}</option>
+              ))}
+            </select>
+          ) : null}
+          {error && sheet !== 'pay' ? <p className="g-error">{error}</p> : null}
+          <button
+            type="button"
+            className="pos-charge"
+            disabled={cart.length === 0}
+            onClick={() => {
+              setTendered(totals.total.toFixed(2))
+              setMethod('cash')
+              setError('')
+              setSheet('pay')
+            }}
+          >
+            {cart.length === 0 ? 'Add items to proceed' : `Charge ${money(totals.total, symbol)}`}
+          </button>
+          <p className="pos-today"><span>Today's Sales</span><strong>{money(todaySales, symbol)}</strong></p>
+        </aside>
+      ) : null}
+      </div>
 
+      {docked ? null : (
       <button type="button" className="grocery-order" onClick={() => setSheet('cart')}>
         <BagIcon />
         {itemCount > 0 ? <span className="g-count">{itemCount}</span> : null}
         View Order
       </button>
+      )}
 
       {sheet ? (
         <div className="g-sheet-wrap" role="presentation" onClick={() => sheet !== 'done' && setSheet(null)}>
@@ -575,6 +743,74 @@ export function GroceryPos({
               </>
             ) : null}
 
+            {sheet === 'shift' ? (
+              <form
+                className="g-weigh"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  if (!store) return
+                  setBusy(true)
+                  const task = shift
+                    ? Promise.resolve()
+                    : openDeskShift(client, store.id, Number(openingCash) || 0).then(() => loadOpenShift(client, store.id))
+                  task
+                    .then((next) => {
+                      if (next) setShift(next)
+                      setSheet(null)
+                    })
+                    .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not open the shift'))
+                    .finally(() => setBusy(false))
+                }}
+              >
+                <header className="g-sheet-head">
+                  <h2>{shift ? 'Drawer' : 'Open shift'}</h2>
+                  <button type="button" className="grocery-close" onClick={() => setSheet(null)}>Close</button>
+                </header>
+                {shift ? (
+                  <p>The drawer opened with {money(shift.opening, symbol)}.</p>
+                ) : (
+                  <label>
+                    Opening cash
+                    <input inputMode="decimal" value={openingCash} onChange={(event) => setOpeningCash(event.target.value)} />
+                  </label>
+                )}
+                {error ? <p className="g-error">{error}</p> : null}
+                {shift ? null : <button type="submit" className="g-pay" disabled={busy}>{busy ? 'Opening…' : 'Open shift'}</button>}
+              </form>
+            ) : null}
+
+            {sheet === 'cash' ? (
+              <form
+                className="g-weigh"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  if (!store || !shift) {
+                    setError('Open a shift before moving cash')
+                    return
+                  }
+                  setBusy(true)
+                  recordCashMove(client, store.id, shift.id, cashKind, Number(cashAmount) || 0, cashKind === 'paid_in' ? 'Paid in' : 'Paid out')
+                    .then(() => {
+                      setCashAmount('')
+                      setSheet(null)
+                    })
+                    .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not save the cash movement'))
+                    .finally(() => setBusy(false))
+                }}
+              >
+                <header className="g-sheet-head">
+                  <h2>{cashKind === 'paid_in' ? 'Paid in' : 'Paid out'}</h2>
+                  <button type="button" className="grocery-close" onClick={() => setSheet(null)}>Close</button>
+                </header>
+                <label>
+                  Amount
+                  <input inputMode="decimal" value={cashAmount} onChange={(event) => setCashAmount(event.target.value)} />
+                </label>
+                {error ? <p className="g-error">{error}</p> : null}
+                <button type="submit" className="g-pay" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+              </form>
+            ) : null}
+
             {sheet === 'done' && receipt ? (
               <div className="g-done">
                 <p className="g-ok">Payment successful</p>
@@ -665,6 +901,12 @@ const CATEGORY_LOGOS: Record<ShopCategory, string> = {
   restaurant: restaurantLogo,
   bakery: bakeryLogo,
   retail: retailLogo,
+}
+
+function ticketStamp(): string {
+  const now = new Date()
+  const part = (value: number) => String(value).padStart(2, '0')
+  return `${now.getFullYear()}${part(now.getMonth() + 1)}${part(now.getDate())}-${part(now.getHours())}${part(now.getMinutes())}${part(now.getSeconds())}`
 }
 
 function readHeld(): HeldBill[] {
