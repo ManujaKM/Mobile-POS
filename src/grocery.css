@@ -952,3 +952,390 @@
   background: #e8f0e8;
   color: #005005;
 }
+
+.products-screen {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  overflow: hidden;
+}
+
+.products-screen .sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.products-title {
+  padding: 18px 22px 0;
+}
+
+.products-title h1 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.products-tabs {
+  display: flex;
+  border-bottom: 1px solid #ececec;
+}
+
+.products-tabs button {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 96px;
+  padding: 10px 8px 8px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: #7a7a7a;
+  font-weight: 650;
+}
+
+.products-tabs button svg {
+  width: 22px;
+  height: 22px;
+}
+
+.products-tabs button.on {
+  color: #2e7d32;
+  border-bottom-color: #2e7d32;
+}
+
+.products-error {
+  margin: 8px 22px 0;
+}
+
+.products-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 22px;
+}
+
+.products-search {
+  position: relative;
+  flex: 1;
+}
+
+.products-search input,
+.products-name {
+  width: 100%;
+  min-height: 44px;
+  border: 1.5px solid #8fce8c;
+  border-radius: 10px;
+  padding: 0 42px 0 14px;
+  background: #fff;
+}
+
+.products-search .scan-mark {
+  right: 14px;
+}
+
+.products-name {
+  max-width: 220px;
+}
+
+.products-count {
+  color: #8a8a8a;
+  white-space: nowrap;
+}
+
+.products-add,
+.products-fab {
+  border: 0;
+  border-radius: 12px;
+  background: #2e7d32;
+  color: #fff;
+  font-weight: 750;
+  min-height: 42px;
+  padding: 0 16px;
+  white-space: nowrap;
+}
+
+.products-add.wide {
+  width: min(720px, 100%);
+  min-height: 52px;
+  margin-top: 28px;
+  border-radius: 8px;
+}
+
+.products-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 22px 88px;
+}
+
+.products-empty {
+  min-height: 100%;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 6px;
+  text-align: center;
+  color: #8a8a8a;
+}
+
+.products-empty strong {
+  color: #222;
+  font-size: 1.15rem;
+}
+
+.products-empty p {
+  margin: 0 0 8px;
+}
+
+.products-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+.products-card {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  text-align: left;
+  background: #fff;
+  border: 0;
+  border-radius: 14px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  padding: 12px;
+}
+
+.products-card.static {
+  cursor: default;
+}
+
+.products-art {
+  display: grid;
+  place-items: center;
+  height: 92px;
+  border-radius: 10px;
+  background: #e8f5e9;
+  font-size: 1.8rem;
+}
+
+.products-price {
+  color: #2e7d32;
+  font-weight: 800;
+}
+
+.products-stock {
+  color: #757575;
+  font-size: 0.82rem;
+}
+
+.products-fab {
+  position: absolute;
+  right: 22px;
+  bottom: 18px;
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: 14px;
+  box-shadow: 0 8px 18px rgba(46, 125, 50, 0.28);
+}
+
+.stock-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.stock-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  padding: 12px 14px;
+}
+
+.stock-list li.low {
+  box-shadow: inset 3px 0 0 #f57c00;
+}
+
+.stock-list span {
+  display: block;
+  color: #757575;
+}
+
+.stock-list button {
+  border: 0;
+  border-radius: 10px;
+  background: #e8f5e9;
+  color: #2e7d32;
+  font-weight: 700;
+  min-height: 38px;
+  padding: 0 12px;
+}
+
+.products-title.split {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 12px;
+}
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  background: transparent;
+  color: #424242;
+}
+
+.icon-btn svg,
+.products-add svg,
+.studio-segment svg {
+  width: 18px;
+  height: 18px;
+}
+
+.products-empty svg {
+  width: 64px;
+  height: 64px;
+  color: #d0d0d0;
+}
+
+.products-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.date-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 22px 0;
+  overflow: auto;
+}
+
+.date-label {
+  color: #616161;
+}
+
+.date-chip {
+  border: 1px solid #e4e4e4;
+  background: #fff;
+  border-radius: 999px;
+  min-height: 34px;
+  padding: 0 14px;
+  color: #424242;
+  white-space: nowrap;
+}
+
+.date-chip.on {
+  background: #e8f5e9;
+  border-color: #c8e6c9;
+  color: #2e7d32;
+  font-weight: 700;
+}
+
+.date-custom {
+  display: flex;
+  gap: 12px;
+  padding: 10px 22px 0;
+}
+
+.date-custom label {
+  display: grid;
+  gap: 4px;
+  color: #616161;
+  font-size: 0.85rem;
+}
+
+.date-custom input {
+  min-height: 40px;
+  border: 1px solid #d0d0d0;
+  border-radius: 10px;
+  padding: 0 10px;
+  background: #fff;
+}
+
+.studio-segment {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin: 0 22px;
+  border: 1px solid #d7ead4;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.studio-segment button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 42px;
+  border: 0;
+  background: #fff;
+  color: #555;
+  font-weight: 650;
+}
+
+.studio-segment button.on {
+  background: #e5f6e1;
+  color: #2e7d32;
+}
+
+.studio-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.studio-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  padding: 12px 14px;
+}
+
+.studio-list span {
+  display: block;
+  color: #757575;
+  font-weight: 400;
+}
+
+.studio-list li > button {
+  border: 0;
+  border-radius: 10px;
+  background: #e8f5e9;
+  color: #2e7d32;
+  font-weight: 700;
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.studio-list li > button:only-child {
+  flex: 1;
+  background: transparent;
+  color: inherit;
+  font-weight: 500;
+  min-height: 0;
+  padding: 0;
+  text-align: left;
+}

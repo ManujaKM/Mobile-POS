@@ -50,7 +50,7 @@ import {
 } from './groceryDesk'
 import { loadGroceryCatalog, loadGroceryStores, money, type GroceryCategory, type GroceryStore, type ShopCategory } from './grocery'
 import { readRememberedStore, writeRememberedStore } from './prefs'
-import { periodWindow } from './time'
+import { formatWhen, periodWindow, todayYmd } from './time'
 import './grocery.css'
 
 type Section = 'pos' | 'products' | 'buying' | 'orders' | 'customers' | 'reports' | 'assistant' | 'contact' | 'settings'
@@ -329,6 +329,7 @@ function ProductsPane({
 }) {
   const [products, setProducts] = useState<DeskProduct[]>([])
   const [categories, setCategories] = useState<GroceryCategory[]>([])
+  const [tab, setTab] = useState<'products' | 'categories' | 'inventory'>('products')
   const [query, setQuery] = useState('')
   const [error, setError] = useState('')
   const [editing, setEditing] = useState<DeskProduct | 'new' | null>(null)
@@ -348,45 +349,163 @@ function ProductsPane({
     reload().catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not load products'))
   }, [client, store.id])
 
-  const visible = products.filter((product) => product.name.toLowerCase().includes(query.trim().toLowerCase()))
+  const needle = query.trim().toLowerCase()
+  const visible = products.filter((product) => {
+    if (tab === 'products' && !product.active) return false
+    return product.name.toLowerCase().includes(needle) || product.barcode.toLowerCase().includes(needle)
+  })
+  const categoryMatches = categories.filter((category) => category.name.toLowerCase().includes(needle))
+  const lowStock = products.filter((product) => product.active && product.reorderPoint > 0 && product.stockQty <= product.reorderPoint)
 
   return (
-    <Pane title="Products">
-      {error ? <p className="g-error">{error}</p> : null}
-      <label className="desk-field">
-        Search
-        <input value={query} placeholder="Search products" onChange={(event) => setQuery(event.target.value)} />
-      </label>
-      <form
-        className="desk-inline"
-        onSubmit={(event) => {
-          event.preventDefault()
-          saveDeskCategory(client, store.id, categoryName)
-            .then(() => {
-              setCategoryName('')
-              onChanged()
-              return reload()
-            })
-            .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not add the category'))
-        }}
-      >
-        <input value={categoryName} placeholder="New category" onChange={(event) => setCategoryName(event.target.value)} />
-        <button type="submit" className="g-pay slim">Add category</button>
-      </form>
-      <button type="button" className="g-pay" onClick={() => setEditing('new')}>Add product</button>
-      <ul className="desk-list">
-        {visible.map((product) => (
-          <li key={product.id}>
-            <button type="button" onClick={() => setEditing(product)}>
-              <strong>{product.name}</strong>
-              <span>
-                {money(product.price, symbol)} · {product.stockQty} {product.unit}
-                {product.active ? '' : ' · hidden'}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
+    <section className="products-screen">
+      <header className="products-title">
+        <h1>{tab === 'inventory' ? 'Inventory' : 'Products'}</h1>
+      </header>
+      <div className="products-tabs" role="tablist">
+        <button type="button" className={tab === 'products' ? 'on' : ''} onClick={() => { setTab('products'); setQuery('') }}>
+          <TabGlyph name="products" />
+          Products
+        </button>
+        <button type="button" className={tab === 'categories' ? 'on' : ''} onClick={() => { setTab('categories'); setQuery('') }}>
+          <TabGlyph name="categories" />
+          Categories
+        </button>
+        <button type="button" className={tab === 'inventory' ? 'on' : ''} onClick={() => { setTab('inventory'); setQuery('') }}>
+          <TabGlyph name="inventory" />
+          Inventory
+        </button>
+      </div>
+      {error ? <p className="g-error products-error">{error}</p> : null}
+      {tab === 'products' ? (
+        <>
+          <div className="products-toolbar">
+            <label className="products-search">
+              <span className="sr">Search products or scan a barcode</span>
+              <input
+                value={query}
+                placeholder="Search products or scan barcode..."
+                onChange={(event) => setQuery(event.target.value)}
+              />
+              <span className="scan-mark" aria-hidden="true">▦</span>
+            </label>
+            <span className="products-count">{visible.length} products</span>
+            <button type="button" className="products-add" onClick={() => setEditing('new')}>+ Add product</button>
+          </div>
+          <div className="products-body">
+            {products.filter((product) => product.active).length === 0 && !needle ? (
+              <div className="products-empty">
+                <span className="pos-empty-icon" aria-hidden="true">▢</span>
+                <strong>No products yet</strong>
+                <p>Add your first product to start selling.</p>
+                <button type="button" className="products-add wide" onClick={() => setEditing('new')}>+ Add Product</button>
+              </div>
+            ) : visible.length === 0 ? (
+              <div className="products-empty">
+                <strong>No products found</strong>
+                <p>Try a different search or barcode.</p>
+              </div>
+            ) : (
+              <div className="products-grid">
+                {visible.map((product) => (
+                  <button key={product.id} type="button" className="products-card" onClick={() => setEditing(product)}>
+                    <span className="products-art" aria-hidden="true">👜</span>
+                    <strong>{product.name}</strong>
+                    <span className="products-price">{money(product.price, symbol)}</span>
+                    <span className="products-stock">Stock: {product.stockQty} {product.unit}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button type="button" className="products-fab" onClick={() => setEditing('new')}>+ Add Product</button>
+        </>
+      ) : null}
+      {tab === 'categories' ? (
+        <>
+          <form
+            className="products-toolbar"
+            onSubmit={(event) => {
+              event.preventDefault()
+              saveDeskCategory(client, store.id, categoryName)
+                .then(() => {
+                  setCategoryName('')
+                  onChanged()
+                  return reload()
+                })
+                .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not add the category'))
+            }}
+          >
+            <label className="products-search">
+              <span className="sr">Search categories</span>
+              <input value={query} placeholder="Search categories..." onChange={(event) => setQuery(event.target.value)} />
+            </label>
+            <input className="products-name" value={categoryName} placeholder="New category" onChange={(event) => setCategoryName(event.target.value)} />
+            <button type="submit" className="products-add">+ Add category</button>
+          </form>
+          <div className="products-body">
+            {categoryMatches.length === 0 ? (
+              <div className="products-empty">
+                <strong>No categories yet</strong>
+                <p>Add a category to group products.</p>
+              </div>
+            ) : (
+              <div className="products-grid">
+                {categoryMatches.map((category) => {
+                  const count = products.filter((product) => product.categoryLocalId === category.localId && product.active).length
+                  return (
+                    <article key={category.localId} className="products-card static">
+                      <strong>{category.name}</strong>
+                      <span className="products-stock">{count} products</span>
+                    </article>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </>
+      ) : null}
+      {tab === 'inventory' ? (
+        <>
+          <div className="products-toolbar">
+            <label className="products-search">
+              <span className="sr">Search stock</span>
+              <input value={query} placeholder="Search stock..." onChange={(event) => setQuery(event.target.value)} />
+            </label>
+            <span className="products-count">{lowStock.length} to reorder</span>
+          </div>
+          <div className="products-body">
+            <ul className="stock-list">
+              {visible.map((product) => {
+                const low = product.reorderPoint > 0 && product.stockQty <= product.reorderPoint
+                return (
+                  <li key={product.id} className={low ? 'low' : ''}>
+                    <div>
+                      <strong>{product.name}</strong>
+                      <span>Stock {product.stockQty} {product.unit} · reorder {product.reorderPoint}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = window.prompt('Counted quantity', String(product.stockQty))
+                        if (next == null) return
+                        adjustDeskStock(client, store.id, product, Number(next) || 0, 'Counted on the till')
+                          .then(() => {
+                            onChanged()
+                            return reload()
+                          })
+                          .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not update stock'))
+                      }}
+                    >
+                      Count
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        </>
+      ) : null}
       {editing ? (
         <ProductForm
           store={store}
@@ -423,7 +542,88 @@ function ProductsPane({
           }
         />
       ) : null}
-    </Pane>
+    </section>
+  )
+}
+
+function TabGlyph({ name }: { name: 'products' | 'categories' | 'inventory' }) {
+  const common = { viewBox: '0 0 24 24', 'aria-hidden': true as const }
+  if (name === 'categories') {
+    return (
+      <svg {...common}>
+        <path fill="currentColor" d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 3h7v4h-7v-4z" />
+      </svg>
+    )
+  }
+  if (name === 'inventory') {
+    return (
+      <svg {...common}>
+        <path fill="currentColor" d="M3 10 12 4l9 6v9H3v-9zm2 1.2V17h14v-5.8l-7-4.6-7 4.6z" />
+      </svg>
+    )
+  }
+  return (
+    <svg {...common}>
+      <path fill="currentColor" d="M4 7h16v12H4V7zm2-3h12l1 2H5l1-2z" />
+    </svg>
+  )
+}
+
+function StudioGlyph({ name }: { name: 'truck' | 'po' | 'grn' | 'calendar' | 'receipt' | 'people' | 'person' | 'wallet' }) {
+  const common = { viewBox: '0 0 24 24', 'aria-hidden': true as const }
+  if (name === 'truck') {
+    return (
+      <svg {...common}>
+        <path fill="currentColor" d="M3 6h11v9H3V6zm12 2h3.2L21 11.2V15h-6V8zM7 18a2 2 0 1 0 0.01 0H7zm10 0a2 2 0 1 0 0.01 0H17z" />
+      </svg>
+    )
+  }
+  if (name === 'po') {
+    return (
+      <svg {...common}>
+        <path fill="currentColor" d="M6 3h9l4 4v14H6V3zm8 1.5V8h3.5L14 4.5zM8 12h8v1.5H8V12zm0 3h8v1.5H8V15z" />
+      </svg>
+    )
+  }
+  if (name === 'grn') {
+    return (
+      <svg {...common}>
+        <path fill="currentColor" d="M7 3h7l4 4v14H7V3zm6 1.6V8h3.4L13 4.6zM9 12h6v1.4H9V12zm0 3h6v1.4H9V15z" />
+      </svg>
+    )
+  }
+  if (name === 'calendar') {
+    return (
+      <svg {...common}>
+        <path fill="currentColor" d="M7 2h2v2h6V2h2v2h3v16H4V4h3V2zm11 8H6v8h12v-8z" />
+      </svg>
+    )
+  }
+  if (name === 'receipt') {
+    return (
+      <svg {...common}>
+        <path fill="currentColor" d="M6 3h12v18l-2-1.4L14 21l-2-1.4L10 21l-2-1.4L6 21V3zm2 4v1.5h8V7H8zm0 3.5V12h8v-1.5H8zm0 3.5v1.5h5V14H8z" />
+      </svg>
+    )
+  }
+  if (name === 'people') {
+    return (
+      <svg {...common}>
+        <path fill="currentColor" d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm6.2 0a2.4 2.4 0 1 0 0-4.8 2.4 2.4 0 0 0 0 4.8zM3.5 18.5c.4-2.6 2.6-4 5.5-4s5.1 1.4 5.5 4v1H3.5v-1zm11.2-.4c.2.5.3.9.3 1.4v1h5.5v-.8c-.3-2-2-3.2-4.2-3.2-.6 0-1.1.1-1.6.2z" />
+      </svg>
+    )
+  }
+  if (name === 'person') {
+    return (
+      <svg {...common}>
+        <path fill="currentColor" d="M12 12a3.2 3.2 0 1 0 0-6.4A3.2 3.2 0 0 0 12 12zm-5.5 7.2c.5-2.8 2.7-4.2 5.5-4.2s5 1.4 5.5 4.2v.8h-11v-.8z" />
+      </svg>
+    )
+  }
+  return (
+    <svg {...common}>
+      <path fill="currentColor" d="M3 7h18v10H3V7zm2 2v6h14V9H5zm11.2 1.2h2.3v1.6h-2.3V10.2z" />
+    </svg>
   )
 }
 
@@ -562,6 +762,9 @@ function BuyingPane({
   const [productId, setProductId] = useState('')
   const [qty, setQty] = useState('1')
   const [lines, setLines] = useState<BuyItem[]>([])
+  const [query, setQuery] = useState('')
+  const [addingSupplier, setAddingSupplier] = useState(false)
+  const [addingOrder, setAddingOrder] = useState(false)
 
   async function reload() {
     const [nextSuppliers, nextOrders, nextGrns, nextProducts] = await Promise.all([
@@ -583,142 +786,235 @@ function BuyingPane({
   }, [client, store.id])
 
   const names = new Map(suppliers.map((supplier) => [supplier.localId, supplier.name]))
+  const needle = query.trim().toLowerCase()
+  const visibleSuppliers = suppliers.filter((supplier) =>
+    supplier.name.toLowerCase().includes(needle) || supplier.phone.toLowerCase().includes(needle),
+  )
+  const visibleOrders = orders.filter((order) => {
+    const label = `${order.number} ${names.get(order.supplierLocalId) ?? ''} ${order.status}`.toLowerCase()
+    return label.includes(needle)
+  })
+  const visibleGrns = grns.filter((grn) => grn.number.toLowerCase().includes(needle))
 
   return (
-    <Pane title="Procurement">
-      {error ? <p className="g-error">{error}</p> : null}
-      <div className="g-methods">
-        <button type="button" className={tab === 'suppliers' ? 'on' : ''} onClick={() => setTab('suppliers')}>Suppliers</button>
-        <button type="button" className={tab === 'orders' ? 'on' : ''} onClick={() => setTab('orders')}>Purchase orders</button>
-        <button type="button" className={tab === 'grn' ? 'on' : ''} onClick={() => setTab('grn')}>GRN</button>
+    <section className="products-screen">
+      <header className="products-title">
+        <h1>Procurement</h1>
+      </header>
+      <div className="products-tabs" role="tablist">
+        <button type="button" className={tab === 'suppliers' ? 'on' : ''} onClick={() => { setTab('suppliers'); setQuery('') }}>
+          <StudioGlyph name="truck" />
+          Suppliers
+        </button>
+        <button type="button" className={tab === 'orders' ? 'on' : ''} onClick={() => { setTab('orders'); setQuery('') }}>
+          <StudioGlyph name="po" />
+          Purchase Orders
+        </button>
+        <button type="button" className={tab === 'grn' ? 'on' : ''} onClick={() => { setTab('grn'); setQuery('') }}>
+          <StudioGlyph name="grn" />
+          GRN
+        </button>
       </div>
+      {error ? <p className="g-error products-error">{error}</p> : null}
       {tab === 'suppliers' ? (
         <>
+          <div className="products-toolbar">
+            <label className="products-search">
+              <span className="sr">Search suppliers</span>
+              <input value={query} placeholder="Search suppliers..." onChange={(event) => setQuery(event.target.value)} />
+            </label>
+            <button type="button" className="products-add" onClick={() => setAddingSupplier(true)}>+ Add supplier</button>
+          </div>
+          <div className="products-body">
+            {visibleSuppliers.length === 0 ? (
+              <div className="products-empty">
+                <strong>{needle ? 'No suppliers found' : 'No suppliers yet'}</strong>
+              </div>
+            ) : (
+              <ul className="studio-list">
+                {visibleSuppliers.map((supplier) => (
+                  <li key={supplier.localId}>
+                    <strong>{supplier.name}</strong>
+                    <span>{supplier.phone || 'No phone'}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </>
+      ) : null}
+      {tab === 'orders' ? (
+        <>
+          <div className="products-toolbar">
+            <label className="products-search">
+              <span className="sr">Search purchase orders</span>
+              <input value={query} placeholder="Search purchase orders..." onChange={(event) => setQuery(event.target.value)} />
+            </label>
+            <button type="button" className="products-add" onClick={() => setAddingOrder(true)}>+ New order</button>
+          </div>
+          <div className="products-body">
+            {visibleOrders.length === 0 ? (
+              <div className="products-empty">
+                <strong>{needle ? 'No purchase orders found' : 'No purchase orders yet'}</strong>
+              </div>
+            ) : (
+              <ul className="studio-list">
+                {visibleOrders.map((order) => (
+                  <li key={order.id}>
+                    <div>
+                      <strong>{order.number}</strong>
+                      <span>{names.get(order.supplierLocalId) ?? 'Supplier'} · {order.status} · {money(order.total, store.currencySymbol)}</span>
+                    </div>
+                    {order.status !== 'received' ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          receiveDeskGrn(client, store.id, order)
+                            .then(() => {
+                              onChanged()
+                              return reload()
+                            })
+                            .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not receive the goods'))
+                        }}
+                      >
+                        Receive
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </>
+      ) : null}
+      {tab === 'grn' ? (
+        <>
+          <div className="products-toolbar">
+            <label className="products-search">
+              <span className="sr">Search goods receipts</span>
+              <input value={query} placeholder="Search GRN..." onChange={(event) => setQuery(event.target.value)} />
+            </label>
+          </div>
+          <div className="products-body">
+            {visibleGrns.length === 0 ? (
+              <div className="products-empty">
+                <strong>{needle ? 'No receipts found' : 'No goods receipts yet'}</strong>
+              </div>
+            ) : (
+              <ul className="studio-list">
+                {visibleGrns.map((grn) => (
+                  <li key={grn.id}>
+                    <div>
+                      <strong>{grn.number}</strong>
+                      <span>{money(grn.total, store.currencySymbol)} · {grn.items.length} lines</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const reason = window.prompt('Reason for the return', 'Returned to supplier')
+                        if (reason == null) return
+                        returnDeskGrn(client, store.id, grn, reason)
+                          .then(() => {
+                            onChanged()
+                            return reload()
+                          })
+                          .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not return the goods'))
+                      }}
+                    >
+                      Return
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </>
+      ) : null}
+      {addingSupplier ? (
+        <div className="g-sheet-wrap" role="presentation" onClick={() => setAddingSupplier(false)}>
           <form
-            className="desk-inline"
+            className="g-sheet"
+            onClick={(event) => event.stopPropagation()}
             onSubmit={(event) => {
               event.preventDefault()
               saveDeskSupplier(client, store.id, { name, contact: '', phone })
                 .then(() => {
                   setName('')
                   setPhone('')
+                  setAddingSupplier(false)
                   return reload()
                 })
                 .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not add the supplier'))
             }}
           >
-            <input value={name} required placeholder="Supplier name" onChange={(event) => setName(event.target.value)} />
-            <input value={phone} placeholder="Phone" onChange={(event) => setPhone(event.target.value)} />
-            <button type="submit" className="g-pay slim">Add</button>
+            <header className="g-sheet-head">
+              <h2>Add supplier</h2>
+              <button type="button" className="grocery-close" onClick={() => setAddingSupplier(false)}>Close</button>
+            </header>
+            <label className="desk-field">Supplier name<input value={name} required onChange={(event) => setName(event.target.value)} /></label>
+            <label className="desk-field">Phone<input value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
+            <button type="submit" className="g-pay">Save supplier</button>
           </form>
-          <ul className="desk-list">
-            {suppliers.map((supplier) => (
-              <li key={supplier.localId}><strong>{supplier.name}</strong><span>{supplier.phone || 'No phone'}</span></li>
-            ))}
-          </ul>
-        </>
+        </div>
       ) : null}
-      {tab === 'orders' ? (
-        <>
-          <label className="desk-field">
-            Supplier
-            <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)}>
-              {suppliers.map((supplier) => (
-                <option key={supplier.localId} value={supplier.localId}>{supplier.name}</option>
-              ))}
-            </select>
-          </label>
-          <div className="desk-inline">
-            <select value={productId} onChange={(event) => setProductId(event.target.value)}>
-              {products.map((product) => (
-                <option key={product.localId} value={product.localId}>{product.name}</option>
-              ))}
-            </select>
-            <input inputMode="decimal" value={qty} onChange={(event) => setQty(event.target.value)} />
-            <button
-              type="button"
-              className="g-pay slim"
-              onClick={() => {
-                const product = products.find((row) => row.localId === productId)
-                if (!product) return
-                setLines((current) => [...current, { productLocalId: product.localId, name: product.name, qty: Number(qty) || 1, cost: product.costPrice || product.price }])
-              }}
-            >
-              Add line
-            </button>
-          </div>
-          <ul className="desk-list">
-            {lines.map((line, index) => (
-              <li key={`${line.productLocalId}-${index}`}><strong>{line.name}</strong><span>{line.qty} × {money(line.cost, store.currencySymbol)}</span></li>
-            ))}
-          </ul>
-          <button
-            type="button"
-            className="g-pay"
-            onClick={() => {
-              saveDeskPurchase(client, store.id, supplierId, lines)
-                .then(() => {
-                  setLines([])
-                  return reload()
-                })
-                .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not save the order'))
-            }}
-          >
-            Save purchase order
-          </button>
-          <ul className="desk-list">
-            {orders.map((order) => (
-              <li key={order.id}>
-                <strong>{order.number}</strong>
-                <span>{names.get(order.supplierLocalId) ?? 'Supplier'} · {order.status} · {money(order.total, store.currencySymbol)}</span>
-                {order.status !== 'received' ? (
-                  <button
-                    type="button"
-                    className="grocery-link"
-                    onClick={() => {
-                      receiveDeskGrn(client, store.id, order)
-                        .then(() => {
-                          onChanged()
-                          return reload()
-                        })
-                        .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not receive the goods'))
-                    }}
-                  >
-                    Receive goods
-                  </button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
-      {tab === 'grn' ? (
-        <ul className="desk-list">
-          {grns.map((grn) => (
-            <li key={grn.id}>
-              <strong>{grn.number}</strong>
-              <span>{money(grn.total, store.currencySymbol)} · {grn.items.length} lines</span>
+      {addingOrder ? (
+        <div className="g-sheet-wrap" role="presentation" onClick={() => setAddingOrder(false)}>
+          <section className="g-sheet" onClick={(event) => event.stopPropagation()}>
+            <header className="g-sheet-head">
+              <h2>New purchase order</h2>
+              <button type="button" className="grocery-close" onClick={() => setAddingOrder(false)}>Close</button>
+            </header>
+            <label className="desk-field">
+              Supplier
+              <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)}>
+                {suppliers.map((supplier) => (
+                  <option key={supplier.localId} value={supplier.localId}>{supplier.name}</option>
+                ))}
+              </select>
+            </label>
+            <div className="desk-inline">
+              <select value={productId} onChange={(event) => setProductId(event.target.value)}>
+                {products.map((product) => (
+                  <option key={product.localId} value={product.localId}>{product.name}</option>
+                ))}
+              </select>
+              <input inputMode="decimal" value={qty} onChange={(event) => setQty(event.target.value)} />
               <button
                 type="button"
-                className="grocery-link"
+                className="g-pay slim"
                 onClick={() => {
-                  const reason = window.prompt('Reason for the return', 'Returned to supplier')
-                  if (reason == null) return
-                  returnDeskGrn(client, store.id, grn, reason)
-                    .then(() => {
-                      onChanged()
-                      return reload()
-                    })
-                    .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not return the goods'))
+                  const product = products.find((row) => row.localId === productId)
+                  if (!product) return
+                  setLines((current) => [...current, { productLocalId: product.localId, name: product.name, qty: Number(qty) || 1, cost: product.costPrice || product.price }])
                 }}
               >
-                Return to supplier
+                Add line
               </button>
-            </li>
-          ))}
-        </ul>
+            </div>
+            <ul className="desk-list">
+              {lines.map((line, index) => (
+                <li key={`${line.productLocalId}-${index}`}><strong>{line.name}</strong><span>{line.qty} × {money(line.cost, store.currencySymbol)}</span></li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              className="g-pay"
+              onClick={() => {
+                saveDeskPurchase(client, store.id, supplierId, lines)
+                  .then(() => {
+                    setLines([])
+                    setAddingOrder(false)
+                    return reload()
+                  })
+                  .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not save the order'))
+              }}
+            >
+              Save purchase order
+            </button>
+          </section>
+        </div>
       ) : null}
-    </Pane>
+    </section>
   )
 }
 
@@ -735,6 +1031,11 @@ function OrdersPane({
   const [selected, setSelected] = useState<DeskOrder | null>(null)
   const [items, setItems] = useState<DeskOrderItem[]>([])
   const [error, setError] = useState('')
+  const [query, setQuery] = useState('')
+  const [kind, setKind] = useState<'today' | 'yesterday' | 'week' | 'month' | 'custom'>('today')
+  const today = todayYmd(store.timezone)
+  const [customStart, setCustomStart] = useState(today)
+  const [customEnd, setCustomEnd] = useState(today)
 
   function reload() {
     return loadDeskOrders(client, store.id).then(setOrders)
@@ -744,27 +1045,90 @@ function OrdersPane({
     reload().catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not load orders'))
   }, [client, store.id])
 
+  const needle = query.trim().toLowerCase()
+  const range =
+    kind === 'yesterday'
+      ? periodWindow('custom', store.timezone, shiftYmd(today, -1), shiftYmd(today, -1))
+      : kind === 'week'
+        ? periodWindow('week', store.timezone, '', '')
+        : kind === 'month'
+          ? periodWindow('month', store.timezone, '', '')
+          : kind === 'custom'
+            ? periodWindow('custom', store.timezone, customStart, customEnd)
+            : periodWindow('today', store.timezone, '', '')
+  const visible = orders.filter((order) => {
+    const text = `${order.number} ${order.method} ${order.status}`.toLowerCase()
+    if (needle && !text.includes(needle)) return false
+    if (!range) return false
+    const at = new Date(order.completedAt).getTime()
+    if (Number.isNaN(at)) return false
+    return at >= new Date(range.start).getTime() && at < new Date(range.end).getTime()
+  })
+  const ranges: { id: typeof kind; label: string }[] = [
+    { id: 'today', label: 'Today' },
+    { id: 'yesterday', label: 'Yesterday' },
+    { id: 'week', label: 'This Week' },
+    { id: 'month', label: 'This Month' },
+    { id: 'custom', label: 'Custom' },
+  ]
+
   return (
-    <Pane title="Orders">
-      {error ? <p className="g-error">{error}</p> : null}
-      <ul className="desk-list">
-        {orders.map((order) => (
-          <li key={order.id}>
-            <button
-              type="button"
-              onClick={() => {
-                setSelected(order)
-                loadDeskOrderItems(client, order.id)
-                  .then(setItems)
-                  .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not load the bill'))
-              }}
-            >
-              <strong>{order.number}</strong>
-              <span>{order.status} · {order.method || 'cash'} · {money(order.total, store.currencySymbol)}</span>
-            </button>
-          </li>
+    <section className="products-screen">
+      <header className="products-title split">
+        <h1>Orders</h1>
+        <button type="button" className="icon-btn" aria-label="Custom date" onClick={() => setKind('custom')}>
+          <StudioGlyph name="calendar" />
+        </button>
+      </header>
+      {error ? <p className="g-error products-error">{error}</p> : null}
+      <div className="date-row">
+        <span className="date-label">Date</span>
+        {ranges.map((item) => (
+          <button key={item.id} type="button" className={kind === item.id ? 'date-chip on' : 'date-chip'} onClick={() => setKind(item.id)}>
+            {kind === item.id ? '✓ ' : ''}{item.label}
+          </button>
         ))}
-      </ul>
+      </div>
+      {kind === 'custom' ? (
+        <div className="date-custom">
+          <label>From<input type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} /></label>
+          <label>To<input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} /></label>
+        </div>
+      ) : null}
+      <div className="products-toolbar">
+        <label className="products-search">
+          <span className="sr">Search orders</span>
+          <input value={query} placeholder="Search orders..." onChange={(event) => setQuery(event.target.value)} />
+        </label>
+      </div>
+      <div className="products-body">
+        {visible.length === 0 ? (
+          <div className="products-empty">
+            <StudioGlyph name="receipt" />
+            <strong>{needle ? 'No orders found' : 'No orders in this period'}</strong>
+            <p>{needle ? 'Try a different search.' : 'Try a different date range.'}</p>
+          </div>
+        ) : (
+          <ul className="studio-list">
+            {visible.map((order) => (
+              <li key={order.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelected(order)
+                    loadDeskOrderItems(client, order.id)
+                      .then(setItems)
+                      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not load the bill'))
+                  }}
+                >
+                  <strong>{order.number}</strong>
+                  <span>{formatWhen(order.completedAt, store.timezone)} · {order.status} · {order.method || 'cash'} · {money(order.total, store.currencySymbol)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       {selected ? (
         <div className="g-sheet-wrap" role="presentation" onClick={() => setSelected(null)}>
           <section className="g-sheet" onClick={(event) => event.stopPropagation()}>
@@ -800,8 +1164,16 @@ function OrdersPane({
           </section>
         </div>
       ) : null}
-    </Pane>
+    </section>
   )
+}
+
+function shiftYmd(ymd: string, days: number): string {
+  const [year, month, day] = ymd.split('-').map(Number)
+  const date = new Date(Date.UTC(year || 1970, (month || 1) - 1, (day || 1) + days))
+  const nextMonth = String(date.getUTCMonth() + 1).padStart(2, '0')
+  const nextDay = String(date.getUTCDate()).padStart(2, '0')
+  return `${date.getUTCFullYear()}-${nextMonth}-${nextDay}`
 }
 
 function CustomersPane({ client, store }: { client: SupabaseClient; store: GroceryStore }) {
@@ -810,6 +1182,9 @@ function CustomersPane({ client, store }: { client: SupabaseClient; store: Groce
   const [phone, setPhone] = useState('')
   const [limit, setLimit] = useState('0')
   const [error, setError] = useState('')
+  const [query, setQuery] = useState('')
+  const [creditOnly, setCreditOnly] = useState(false)
+  const [adding, setAdding] = useState(false)
 
   function reload() {
     return loadDeskCustomers(client, store.id).then(setCustomers)
@@ -819,55 +1194,107 @@ function CustomersPane({ client, store }: { client: SupabaseClient; store: Groce
     reload().catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not load customers'))
   }, [client, store.id])
 
+  const needle = query.trim().toLowerCase()
+  const visible = customers.filter((customer) => {
+    if (creditOnly && customer.creditBalance <= 0) return false
+    return customer.name.toLowerCase().includes(needle) || customer.phone.toLowerCase().includes(needle)
+  })
+
   return (
-    <Pane title="Customers">
-      {error ? <p className="g-error">{error}</p> : null}
-      <form
-        className="desk-inline"
-        onSubmit={(event) => {
-          event.preventDefault()
-          saveDeskCustomer(client, store.id, { name, phone, email: '', creditLimit: Number(limit) || 0 })
-            .then(() => {
-              setName('')
-              setPhone('')
-              setLimit('0')
-              return reload()
-            })
-            .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not add the customer'))
-        }}
-      >
-        <input value={name} required placeholder="Name" onChange={(event) => setName(event.target.value)} />
-        <input value={phone} placeholder="Phone" onChange={(event) => setPhone(event.target.value)} />
-        <input inputMode="decimal" value={limit} placeholder="Credit limit" onChange={(event) => setLimit(event.target.value)} />
-        <button type="submit" className="g-pay slim">Add</button>
-      </form>
-      <ul className="desk-list">
-        {customers.map((customer) => (
-          <li key={customer.id}>
-            <strong>{customer.name}</strong>
-            <span>
-              {customer.phone || 'No phone'} · spent {money(customer.totalSpent, store.currencySymbol)} · credit{' '}
-              {money(customer.creditBalance, store.currencySymbol)}
-            </span>
-            {customer.creditBalance > 0 ? (
-              <button
-                type="button"
-                className="grocery-link"
-                onClick={() => {
-                  const amount = window.prompt('Amount collected', String(customer.creditBalance))
-                  if (amount == null) return
-                  collectDeskCredit(client, store.id, customer, Number(amount) || 0, 'cash')
-                    .then(reload)
-                    .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not collect the payment'))
-                }}
-              >
-                Collect credit
-              </button>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-    </Pane>
+    <section className="products-screen">
+      <header className="products-title">
+        <h1>Customers</h1>
+      </header>
+      {error ? <p className="g-error products-error">{error}</p> : null}
+      <div className="products-toolbar">
+        <label className="products-search">
+          <span className="sr">Search by name or phone</span>
+          <input value={query} placeholder="Search by name or phone..." onChange={(event) => setQuery(event.target.value)} />
+        </label>
+        <button type="button" className="products-add" onClick={() => setAdding(true)}>
+          <StudioGlyph name="person" />
+          + Add customer
+        </button>
+      </div>
+      <div className="studio-segment" role="tablist">
+        <button type="button" className={creditOnly ? '' : 'on'} onClick={() => setCreditOnly(false)}>
+          {creditOnly ? '' : '✓ '}All
+        </button>
+        <button type="button" className={creditOnly ? 'on' : ''} onClick={() => setCreditOnly(true)}>
+          {creditOnly ? '✓ ' : <StudioGlyph name="wallet" />}
+          Credit
+        </button>
+      </div>
+      <div className="products-body">
+        {visible.length === 0 ? (
+          <div className="products-empty">
+            <StudioGlyph name="people" />
+            <strong>{needle || creditOnly ? 'No customers found' : 'No customers yet'}</strong>
+            <p>{needle || creditOnly ? 'Try another search or the All list.' : 'Add your first customer to start tracking purchases.'}</p>
+            {needle || creditOnly ? null : (
+              <button type="button" className="products-add wide" onClick={() => setAdding(true)}>+ Add customer</button>
+            )}
+          </div>
+        ) : (
+          <ul className="studio-list">
+            {visible.map((customer) => (
+              <li key={customer.id}>
+                <div>
+                  <strong>{customer.name}</strong>
+                  <span>
+                    {customer.phone || 'No phone'} · spent {money(customer.totalSpent, store.currencySymbol)} · credit{' '}
+                    {money(customer.creditBalance, store.currencySymbol)}
+                  </span>
+                </div>
+                {customer.creditBalance > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const amount = window.prompt('Amount collected', String(customer.creditBalance))
+                      if (amount == null) return
+                      collectDeskCredit(client, store.id, customer, Number(amount) || 0, 'cash')
+                        .then(reload)
+                        .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not collect the payment'))
+                    }}
+                  >
+                    Collect
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {adding ? (
+        <div className="g-sheet-wrap" role="presentation" onClick={() => setAdding(false)}>
+          <form
+            className="g-sheet"
+            onClick={(event) => event.stopPropagation()}
+            onSubmit={(event) => {
+              event.preventDefault()
+              saveDeskCustomer(client, store.id, { name, phone, email: '', creditLimit: Number(limit) || 0 })
+                .then(() => {
+                  setName('')
+                  setPhone('')
+                  setLimit('0')
+                  setAdding(false)
+                  return reload()
+                })
+                .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not add the customer'))
+            }}
+          >
+            <header className="g-sheet-head">
+              <h2>Add customer</h2>
+              <button type="button" className="grocery-close" onClick={() => setAdding(false)}>Close</button>
+            </header>
+            <label className="desk-field">Name<input value={name} required onChange={(event) => setName(event.target.value)} /></label>
+            <label className="desk-field">Phone<input value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
+            <label className="desk-field">Credit limit<input inputMode="decimal" value={limit} onChange={(event) => setLimit(event.target.value)} /></label>
+            <button type="submit" className="g-pay">Save customer</button>
+          </form>
+        </div>
+      ) : null}
+    </section>
   )
 }
 
