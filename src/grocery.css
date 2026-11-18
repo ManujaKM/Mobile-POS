@@ -384,6 +384,7 @@
 }
 
 .g-sheet input,
+.g-sheet select,
 .g-foot input,
 .g-weigh input {
   width: 100%;
@@ -411,6 +412,10 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
+}
+
+.g-methods.wrap {
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
 }
 
 .g-methods button {
@@ -531,4 +536,183 @@
   .grocery-grid {
     grid-template-columns: repeat(3, 1fr);
   }
+}
+
+.grocery-home {
+  height: 100%;
+  display: flex;
+  flex-direction: row;
+  background: #f5f7f5;
+  color: #1a1a1a;
+}
+
+.grocery-side {
+  flex: none;
+  width: 118px;
+  height: 100%;
+  overflow: auto;
+  background: #fff;
+  border-right: 1px solid #d7e3d7;
+}
+
+.grocery-home-body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.grocery-home-body > .grocery {
+  height: 100%;
+}
+
+.grocery-docked .grocery-order {
+  left: calc(118px + 16px);
+}
+
+.grocery-docked .grocery-top {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.grocery-docked .grocery-logo {
+  width: 108px;
+}
+
+.grocery-docked .grocery-shop {
+  width: 100%;
+  margin-left: 0;
+  justify-content: space-between;
+}
+
+.grocery-docked .grocery-shop strong {
+  max-width: none;
+}
+
+.grocery-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: calc(10px + env(safe-area-inset-top)) 8px calc(10px + env(safe-area-inset-bottom));
+}
+
+.grocery-nav button,
+.grocery-more button {
+  width: 100%;
+  min-height: 46px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #3d4a3d;
+  font-weight: 700;
+  text-align: left;
+  padding: 8px 12px;
+}
+
+.grocery-nav button.on,
+.grocery-more button.on {
+  background: #e8f0e8;
+  color: #005005;
+}
+
+.grocery-more {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.grocery-desk {
+  height: 100%;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 16px 14px 24px;
+}
+
+.grocery-desk header h1,
+.grocery-desk h2 {
+  margin: 0;
+}
+
+.desk-field,
+.desk-form {
+  display: grid;
+  gap: 8px;
+}
+
+.desk-field,
+.desk-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.desk-field input,
+.desk-field select,
+.desk-form input,
+.desk-inline input,
+.desk-inline select {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #d7e3d7;
+  border-radius: 12px;
+  padding: 0 12px;
+  background: #fff;
+}
+
+.desk-inline {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.desk-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.desk-list li,
+.desk-list button {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  background: #fff;
+  border: 0;
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.desk-list span {
+  color: #616161;
+}
+
+.desk-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.desk-stats p {
+  margin: 0;
+  background: #fff;
+  border-radius: 14px;
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.g-pay.slim {
+  width: auto;
+  min-height: 44px;
+  padding: 0 14px;
+}
+
+.g-pay.ghost {
+  background: #e8f0e8;
+  color: #005005;
 }

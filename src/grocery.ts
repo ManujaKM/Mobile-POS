@@ -19,6 +19,9 @@ export type GroceryStore = {
   category: string
   currencySymbol: string
   taxRate: number
+  address: string
+  phone: string
+  timezone: string
 }
 
 export function shopCategory(value: string): ShopCategory {
@@ -47,9 +50,14 @@ export type GroceryProduct = {
 export type CartLine = {
   product: GroceryProduct
   qty: number
+  price?: number
 }
 
-export type PayMethod = 'cash' | 'card' | 'upi'
+export type PayMethod = 'cash' | 'card' | 'upi' | 'credit'
+
+export function linePrice(line: CartLine): number {
+  return line.price ?? line.product.price
+}
 
 export type CompletedSale = {
   orderNumber: string
@@ -88,7 +96,7 @@ export function lineSubtotal(price: number, qty: number): number {
 }
 
 export function saleTotals(lines: CartLine[], taxRate: number, discount: number) {
-  const subtotal = round2(lines.reduce((sum, line) => sum + lineSubtotal(line.product.price, line.qty), 0))
+  const subtotal = round2(lines.reduce((sum, line) => sum + lineSubtotal(linePrice(line), line.qty), 0))
   const discountAmount = round2(Math.min(Math.max(0, discount), subtotal))
   const taxable = round2(subtotal - discountAmount)
   const tax = round2(taxable * taxRate)
@@ -226,7 +234,7 @@ function slug(value: string): string {
 export async function loadGroceryStores(client: SupabaseClient): Promise<GroceryStore[]> {
   const { data, error } = await client
     .from('stores')
-    .select('id, name, category, currency_symbol, tax_rate')
+    .select('id, name, category, currency_symbol, tax_rate, address, phone, timezone')
     .order('name')
   if (error) throw new Error(error.message)
   const rows = (data ?? []).map((row) => ({
@@ -235,6 +243,9 @@ export async function loadGroceryStores(client: SupabaseClient): Promise<Grocery
     category: String(row.category || ''),
     currencySymbol: String(row.currency_symbol || 'Rs'),
     taxRate: asNumber(row.tax_rate),
+    address: String(row.address ?? ''),
+    phone: String(row.phone ?? ''),
+    timezone: String(row.timezone || 'Asia/Colombo'),
   }))
   return rows.filter((row) => row.category.toLowerCase() !== 'archived')
 }
@@ -305,6 +316,7 @@ export async function completeGrocerySale(
   discount: number,
   method: PayMethod,
   tendered: number | null,
+  customerLocalId?: string,
 ): Promise<CompletedSale> {
   if (lines.length === 0) throw new Error('Add a product before taking payment')
   const totals = saleTotals(lines, taxRate, discount)
@@ -312,6 +324,7 @@ export async function completeGrocerySale(
     const paid = tendered ?? 0
     if (paid + 0.009 < totals.total) throw new Error('Cash received is less than the total')
   }
+  if (method === 'credit' && !customerLocalId) throw new Error('Choose a customer for a credit sale')
 
   const orderNumber = await nextBill(client, storeId)
   const orderId = uuidv5(orderNumber, storeId)
@@ -332,7 +345,9 @@ export async function completeGrocerySale(
     upi_amount: method === 'upi' ? totals.total : null,
     status: 'completed',
     refunded_amount: 0,
-    is_credit_sale: false,
+    is_credit_sale: method === 'credit',
+    credit_customer_id: method === 'credit' ? customerLocalId : null,
+    customer_local_id: customerLocalId || null,
     completed_at: completedAt,
   })
   if (orderError) throw new Error(orderError.message)
@@ -344,10 +359,10 @@ export async function completeGrocerySale(
       product_id: line.product.id,
       product_name: line.product.name,
       quantity: line.qty,
-      unit_price: line.product.price,
+      unit_price: linePrice(line),
       discount_amount: 0,
-      is_price_overridden: false,
-      subtotal: lineSubtotal(line.product.price, line.qty),
+      is_price_overridden: line.price != null && line.price !== line.product.price,
+      subtotal: lineSubtotal(linePrice(line), line.qty),
     })),
   )
   if (itemError) {
@@ -358,8 +373,9 @@ export async function completeGrocerySale(
   let stockWarning = ''
   try {
     for (const line of lines) {
-      await reduceStock(client, storeId, line.product.id, line.qty)
+      await reduceStock(client, storeId, line.product.id, line.qty, orderNumber)
     }
+    if (customerLocalId) await addCustomerSale(client, storeId, customerLocalId, totals.total, method === 'credit')
   } catch (err) {
     stockWarning = err instanceof Error ? err.message : 'Stock was not updated'
   }
@@ -387,10 +403,37 @@ async function nextBill(client: SupabaseClient, storeId: string): Promise<string
   return `MG-${max + 1}-${suffix}`
 }
 
-async function reduceStock(client: SupabaseClient, storeId: string, productId: string, sold: number) {
+async function addCustomerSale(
+  client: SupabaseClient,
+  storeId: string,
+  customerLocalId: string,
+  total: number,
+  onCredit: boolean,
+) {
+  const { data, error } = await client
+    .from('customers')
+    .select('total_spent, credit_balance')
+    .eq('store_id', storeId)
+    .eq('local_id', customerLocalId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) return
+  const { error: updateError } = await client
+    .from('customers')
+    .update({
+      total_spent: round2(asNumber(data.total_spent) + total),
+      credit_balance: round2(asNumber(data.credit_balance) + (onCredit ? total : 0)),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('store_id', storeId)
+    .eq('local_id', customerLocalId)
+  if (updateError) throw new Error(updateError.message)
+}
+
+async function reduceStock(client: SupabaseClient, storeId: string, productId: string, sold: number, bill: string) {
   const { data, error } = await client
     .from('products')
-    .select('stock_qty')
+    .select('stock_qty, local_id')
     .eq('id', productId)
     .eq('store_id', storeId)
     .maybeSingle()
@@ -403,6 +446,17 @@ async function reduceStock(client: SupabaseClient, storeId: string, productId: s
     .eq('id', productId)
     .eq('store_id', storeId)
   if (updateError) throw new Error(updateError.message)
+  const localId = String(data.local_id ?? '')
+  if (!localId) return
+  await client.from('stock_movements').insert({
+    id: crypto.randomUUID(),
+    store_id: storeId,
+    local_id: crypto.randomUUID(),
+    product_local_id: localId,
+    type: 'sale',
+    quantity: -sold,
+    note: bill,
+  })
 }
 
 async function eachPage(

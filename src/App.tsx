@@ -43,6 +43,7 @@ import {
 import { formatWhen, periodWindow, todayYmd, type PeriodKind, type TimeWindow } from './time'
 import { downloadText, salesReportCsv, salesReportFilename } from './reportFile'
 import { WaveChart } from './WaveChart'
+import { GroceryHome } from './GroceryHome'
 import { CategoryPick, GroceryPos } from './GroceryPos'
 import type { ShopCategory } from './grocery'
 import { Buying, Cash, Counts, Expiry, Promotions } from './ops'
@@ -190,6 +191,9 @@ function ShopHome({
         <Dashboard client={client} email={email} onSignOut={onSignOut} />
       </div>
     )
+  }
+  if (category === 'grocery') {
+    return <GroceryHome client={client} onSignOut={onSignOut} onOpenPortal={() => setScreen('portal')} />
   }
   return (
     <GroceryPos

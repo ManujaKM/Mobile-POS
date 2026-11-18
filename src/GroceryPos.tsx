@@ -10,6 +10,7 @@ import {
   completeGrocerySale,
   createGroceryShop,
   isWeighed,
+  linePrice,
   lineSubtotal,
   loadGroceryCatalog,
   loadGroceryStores,
@@ -28,10 +29,15 @@ import {
   type PayMethod,
   type ShopCategory,
 } from './grocery'
+import { loadDeskCustomers, type DeskCustomer } from './groceryDesk'
 import { readRememberedStore, writeRememberedStore } from './prefs'
 import './grocery.css'
 
-type Sheet = 'cart' | 'pay' | 'done' | 'weigh' | null
+type HeldBill = { id: string; at: string; cart: CartLine[]; discount: string }
+
+const HELD_KEY = 'mentura-held-bills'
+
+type Sheet = 'cart' | 'pay' | 'done' | 'weigh' | 'recall' | null
 
 const STORE_PICK = 'mentura-grocery-store'
 
@@ -40,11 +46,15 @@ export function GroceryPos({
   category,
   onSignOut,
   onOpenPortal,
+  docked = false,
+  reloadToken = 0,
 }: {
   client: SupabaseClient
   category: ShopCategory
   onSignOut: () => void
   onOpenPortal: () => void
+  docked?: boolean
+  reloadToken?: number
 }) {
   const [stores, setStores] = useState<GroceryStore[] | null>(null)
   const [storeId, setStoreId] = useState('')
@@ -63,6 +73,11 @@ export function GroceryPos({
   const [error, setError] = useState('')
   const [loadError, setLoadError] = useState('')
   const [receipt, setReceipt] = useState<{ orderNumber: string; total: number; change: number; stockWarning: string } | null>(null)
+  const [held, setHeld] = useState<HeldBill[]>(() => readHeld())
+  const [customers, setCustomers] = useState<DeskCustomer[]>([])
+  const [customerId, setCustomerId] = useState('')
+  const [priceFor, setPriceFor] = useState<string | null>(null)
+  const [priceDraft, setPriceDraft] = useState('')
 
   useEffect(() => {
     let active = true
@@ -102,7 +117,7 @@ export function GroceryPos({
     return () => {
       active = false
     }
-  }, [client, storeId])
+  }, [client, storeId, reloadToken])
 
   const store = stores?.find((row) => row.id === storeId) ?? null
   const symbol = store?.currencySymbol || 'Rs'
@@ -178,6 +193,7 @@ export function GroceryPos({
         discountValue,
         method,
         method === 'cash' ? Number(tendered) : null,
+        customerId || undefined,
       )
       setReceipt(sale)
       setCart([])
@@ -226,7 +242,7 @@ export function GroceryPos({
   const categoryLabel = SHOP_CATEGORIES.find((item) => item.id === category)?.label ?? 'Grocery'
 
   return (
-    <div className="grocery" data-category={category}>
+    <div className={docked ? 'grocery grocery-docked' : 'grocery'} data-category={category}>
       <header className="grocery-top">
         <img className="grocery-logo" src={logoUrl} alt={`POS ${categoryLabel}`} />
         <div className="grocery-shop">
@@ -376,7 +392,36 @@ export function GroceryPos({
                     <li key={line.product.id} className="g-line">
                       <div>
                         <p className="g-line-name">{line.product.name}</p>
-                        <p className="g-line-meta">{money(lineSubtotal(line.product.price, line.qty), symbol)}</p>
+                        <p className="g-line-meta">{money(lineSubtotal(linePrice(line), line.qty), symbol)}</p>
+                        {priceFor === line.product.id ? (
+                          <form
+                            className="desk-inline"
+                            onSubmit={(event) => {
+                              event.preventDefault()
+                              const next = Number(priceDraft)
+                              setCart((current) =>
+                                current.map((row) =>
+                                  row.product.id === line.product.id ? { ...row, price: Number.isFinite(next) ? next : row.price } : row,
+                                ),
+                              )
+                              setPriceFor(null)
+                            }}
+                          >
+                            <input inputMode="decimal" value={priceDraft} onChange={(event) => setPriceDraft(event.target.value)} />
+                            <button type="submit" className="g-pay slim">Set</button>
+                          </form>
+                        ) : (
+                          <button
+                            type="button"
+                            className="grocery-link"
+                            onClick={() => {
+                              setPriceFor(line.product.id)
+                              setPriceDraft(String(linePrice(line)))
+                            }}
+                          >
+                            Price {money(linePrice(line), symbol)}
+                          </button>
+                        )}
                       </div>
                       <div className="g-stepper">
                         <button type="button" aria-label={`Decrease ${line.product.name}`} onClick={() => changeQty(line.product.id, -qtyStep(line.product.unit))}>
@@ -401,6 +446,32 @@ export function GroceryPos({
                   <p className="g-due">
                     Total <strong>{money(totals.total, symbol)}</strong>
                   </p>
+                  <div className="desk-inline">
+                    <button
+                      type="button"
+                      className="g-pay ghost"
+                      disabled={cart.length === 0}
+                      onClick={() => {
+                        const bill: HeldBill = {
+                          id: crypto.randomUUID(),
+                          at: new Date().toISOString(),
+                          cart,
+                          discount,
+                        }
+                        const next = [bill, ...held].slice(0, 12)
+                        setHeld(next)
+                        writeHeld(next)
+                        setCart([])
+                        setDiscount('0')
+                        setSheet(null)
+                      }}
+                    >
+                      Hold
+                    </button>
+                    <button type="button" className="g-pay ghost" disabled={held.length === 0} onClick={() => setSheet('recall')}>
+                      Recall {held.length > 0 ? held.length : ''}
+                    </button>
+                  </div>
                   <button
                     type="button"
                     className="g-pay"
@@ -410,6 +481,11 @@ export function GroceryPos({
                       setMethod('cash')
                       setError('')
                       setSheet('pay')
+                      if (store) {
+                        loadDeskCustomers(client, store.id)
+                          .then(setCustomers)
+                          .catch(() => setCustomers([]))
+                      }
                     }}
                   >
                     Pay {money(totals.total, symbol)}
@@ -429,13 +505,24 @@ export function GroceryPos({
                 <p className="g-due">
                   Charge <strong>{money(totals.total, symbol)}</strong>
                 </p>
-                <div className="g-methods">
-                  {(['cash', 'card', 'upi'] as PayMethod[]).map((item) => (
+                <div className="g-methods wrap">
+                  {(['cash', 'card', 'upi', 'credit'] as PayMethod[]).map((item) => (
                     <button key={item} type="button" className={item === method ? 'on' : ''} onClick={() => setMethod(item)}>
                       {item === 'upi' ? 'UPI' : item[0].toUpperCase() + item.slice(1)}
                     </button>
                   ))}
                 </div>
+                <label>
+                  Customer
+                  <select value={customerId} onChange={(event) => setCustomerId(event.target.value)}>
+                    <option value="">{method === 'credit' ? 'Choose a customer' : 'Walk-in'}</option>
+                    {customers.map((customer) => (
+                      <option key={customer.localId} value={customer.localId}>
+                        {customer.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 {method === 'cash' ? (
                   <label>
                     Cash received
@@ -446,9 +533,45 @@ export function GroceryPos({
                   <p className="g-ok">Change {money(Math.max(0, Number(tendered) - totals.total), symbol)}</p>
                 ) : null}
                 {error ? <p className="g-error">{error}</p> : null}
-                <button type="button" className="g-pay" disabled={busy || cart.length === 0 || cashShort} onClick={() => void pay()}>
+                <button
+                  type="button"
+                  className="g-pay"
+                  disabled={busy || cart.length === 0 || cashShort || (method === 'credit' && !customerId)}
+                  onClick={() => void pay()}
+                >
                   {busy ? 'Saving…' : 'Complete sale'}
                 </button>
+              </>
+            ) : null}
+
+            {sheet === 'recall' ? (
+              <>
+                <header className="g-sheet-head">
+                  <h2>Held bills</h2>
+                  <button type="button" className="grocery-close" onClick={() => setSheet('cart')}>
+                    Back
+                  </button>
+                </header>
+                <ul className="desk-list">
+                  {held.map((bill) => (
+                    <li key={bill.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCart(bill.cart)
+                          setDiscount(bill.discount)
+                          const next = held.filter((row) => row.id !== bill.id)
+                          setHeld(next)
+                          writeHeld(next)
+                          setSheet('cart')
+                        }}
+                      >
+                        <strong>{bill.cart.length} items</strong>
+                        <span>{new Date(bill.at).toLocaleString()}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               </>
             ) : null}
 
@@ -542,6 +665,19 @@ const CATEGORY_LOGOS: Record<ShopCategory, string> = {
   restaurant: restaurantLogo,
   bakery: bakeryLogo,
   retail: retailLogo,
+}
+
+function readHeld(): HeldBill[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(HELD_KEY) || '[]') as HeldBill[]
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function writeHeld(bills: HeldBill[]) {
+  localStorage.setItem(HELD_KEY, JSON.stringify(bills))
 }
 
 function BagIcon() {
