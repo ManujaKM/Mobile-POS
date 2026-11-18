@@ -1339,3 +1339,223 @@
   padding: 0;
   text-align: left;
 }
+
+.insight-row {
+  display: flex;
+  gap: 8px;
+  padding: 12px 22px 0;
+  overflow: auto;
+}
+
+.insight-chip {
+  border: 0;
+  border-radius: 999px;
+  background: #e7f6e4;
+  color: #2e7d32;
+  min-height: 34px;
+  padding: 0 12px;
+  white-space: nowrap;
+  font-weight: 650;
+}
+
+.insight-chip.on {
+  outline: 2px solid #2e7d32;
+}
+
+.products-body h2 {
+  margin: 22px 0 10px;
+  font-size: 1.15rem;
+}
+
+.report-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.report-kpis article {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #ececec;
+  border-radius: 14px;
+  padding: 16px;
+  background: #fff;
+}
+
+.report-kpis strong {
+  font-size: 1.15rem;
+}
+
+.report-kpis span,
+.report-empty p,
+.settings-sync {
+  color: #757575;
+}
+
+.report-empty {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 28px 12px 12px;
+  text-align: center;
+}
+
+.report-empty p,
+.report-empty strong {
+  margin: 0;
+}
+
+.report-bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.report-bars li {
+  display: grid;
+  grid-template-columns: 72px 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.report-bars .bar {
+  height: 10px;
+  border-radius: 999px;
+  background: #e8f5e9;
+  overflow: hidden;
+}
+
+.report-bars i {
+  display: block;
+  height: 100%;
+  background: #2e7d32;
+}
+
+.contact-page h2,
+.settings-page h2 {
+  margin: 22px 0 10px;
+}
+
+.contact-hero {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  background: #e8f6e4;
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.contact-hero p,
+.contact-help p {
+  margin: 0;
+  color: #4e6b4e;
+}
+
+.contact-badge {
+  border-radius: 999px;
+  background: #2e7d32;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 4px 10px;
+}
+
+.contact-whatsapp {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  background: #1fba4a;
+  color: #fff;
+  text-decoration: none;
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.contact-whatsapp span {
+  display: grid;
+}
+
+.contact-whatsapp small {
+  opacity: 0.9;
+}
+
+.contact-row,
+.contact-help {
+  display: grid;
+  gap: 2px;
+  margin-top: 8px;
+  background: #f6f8f6;
+  border-radius: 14px;
+  padding: 14px 16px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.contact-row strong {
+  color: #2e7d32;
+}
+
+.settings-kicker {
+  margin: 18px 0 8px;
+  color: #8a8a8a;
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.settings-row {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  border-bottom: 1px solid #f0f0f0;
+  background: transparent;
+  text-align: left;
+  padding: 12px 4px;
+  color: inherit;
+}
+
+.settings-row span,
+.settings-sync {
+  display: block;
+  color: #757575;
+}
+
+.settings-row button,
+.settings-row .pencil {
+  color: #2e7d32;
+  font-weight: 700;
+}
+
+.settings-outline,
+.settings-plan {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.settings-outline {
+  min-height: 44px;
+  border: 1px solid #d7ead4;
+  border-radius: 10px;
+  background: #fff;
+  color: #2e7d32;
+  font-weight: 700;
+}
+
+.settings-plan {
+  display: flex;
+  text-decoration: none;
+}
+
+@media (max-width: 900px) {
+  .report-kpis {
+    grid-template-columns: 1fr 1fr;
+  }
+}

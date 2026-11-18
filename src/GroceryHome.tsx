@@ -288,22 +288,48 @@ function AssistantPane({ client, store }: { client: SupabaseClient; store: Groce
 
 function ContactPane() {
   return (
-    <Pane title="Contact Us">
-      <ul className="desk-list">
-        <li>
-          <strong>Phone</strong>
-          <span>+94 71 145 0490</span>
-        </li>
-        <li>
-          <strong>Email</strong>
-          <span>contact@menturaglobal.com</span>
-        </li>
-        <li>
-          <strong>Website</strong>
-          <span>www.menturaglobal.com</span>
-        </li>
-      </ul>
-    </Pane>
+    <section className="products-screen">
+      <header className="products-title">
+        <h1>Contact Us</h1>
+      </header>
+      <div className="products-body contact-page">
+        <article className="contact-hero">
+          <strong>Mentura Global Pvt Ltd</strong>
+          <span className="contact-badge">24/7 Customer Support</span>
+          <p>Your dedicated POS partner — reach us anytime for help, training, or new feature requests.</p>
+        </article>
+        <a className="contact-whatsapp" href="https://wa.me/94711450490" target="_blank" rel="noreferrer">
+          <span>
+            <strong>WhatsApp — Instant support</strong>
+            <span>+94 71 145 0490</span>
+            <small>Fastest way to reach us. Tap to chat now.</small>
+          </span>
+          <span aria-hidden="true">›</span>
+        </a>
+        <h2>Get in touch</h2>
+        <a className="contact-row" href="mailto:contact@menturaglobal.com">
+          <span>Email</span>
+          <strong>contact@menturaglobal.com</strong>
+        </a>
+        <a className="contact-row" href="tel:+94711450490">
+          <span>Phone</span>
+          <strong>+94 71 145 0490</strong>
+        </a>
+        <a className="contact-row" href="https://www.menturaglobal.com" target="_blank" rel="noreferrer">
+          <span>Website</span>
+          <strong>www.menturaglobal.com</strong>
+        </a>
+        <h2>How we can help</h2>
+        <article className="contact-help">
+          <strong>24/7 customer support</strong>
+          <p>Mentura Global Pvt Ltd team is available around the clock for urgent POS issues and guidance.</p>
+        </article>
+        <article className="contact-help">
+          <strong>On-site agent support</strong>
+          <p>A Mentura agent can visit your shop for setup, training, and hands-on help.</p>
+        </article>
+      </div>
+    </section>
   )
 }
 
@@ -1299,14 +1325,28 @@ function CustomersPane({ client, store }: { client: SupabaseClient; store: Groce
 }
 
 function ReportsPane({ client, store }: { client: SupabaseClient; store: GroceryStore }) {
-  const [tab, setTab] = useState<'sales' | 'stock' | 'voids' | 'credit' | 'reorder'>('sales')
+  const [tab, setTab] = useState<'sales' | 'stock' | 'voids' | 'tax' | 'credit'>('sales')
+  const [insight, setInsight] = useState<'overview' | 'profit' | 'forecast' | 'reorder' | 'customers'>('overview')
   const [summary, setSummary] = useState<PeriodSummary | null>(null)
   const [low, setLow] = useState<LowStockRow[]>([])
   const [voids, setVoids] = useState<VoidRow[]>([])
   const [credit, setCredit] = useState<CreditCustomer[]>([])
   const [reorder, setReorder] = useState<DeskProduct[]>([])
   const [error, setError] = useState('')
-  const range = periodWindow('today', store.timezone, '', '')
+  const [kind, setKind] = useState<'today' | 'yesterday' | 'week' | 'month' | 'custom'>('today')
+  const today = todayYmd(store.timezone)
+  const [customStart, setCustomStart] = useState(today)
+  const [customEnd, setCustomEnd] = useState(today)
+  const range =
+    kind === 'yesterday'
+      ? periodWindow('custom', store.timezone, shiftYmd(today, -1), shiftYmd(today, -1))
+      : kind === 'week'
+        ? periodWindow('week', store.timezone, '', '')
+        : kind === 'month'
+          ? periodWindow('month', store.timezone, '', '')
+          : kind === 'custom'
+            ? periodWindow('custom', store.timezone, customStart, customEnd)
+            : periodWindow('today', store.timezone, '', '')
 
   useEffect(() => {
     if (!range) return
@@ -1327,65 +1367,197 @@ function ReportsPane({ client, store }: { client: SupabaseClient; store: Grocery
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not load reports'))
   }, [client, store.id, range?.start, range?.end, store.timezone])
 
+  const sales = summary?.sales ?? 0
+  const orders = summary?.completedCount ?? 0
+  const average = orders > 0 ? sales / orders : 0
+  const paid = summary
+    ? summary.payments.cash + summary.payments.card + summary.payments.upi + summary.payments.credit + summary.payments.other
+    : 0
+  const ranges: { id: typeof kind; label: string }[] = [
+    { id: 'today', label: 'Today' },
+    { id: 'yesterday', label: 'Yesterday' },
+    { id: 'week', label: 'This Week' },
+    { id: 'month', label: 'This Month' },
+    { id: 'custom', label: 'Custom' },
+  ]
+  const insights: { id: typeof insight; label: string }[] = [
+    { id: 'overview', label: 'AI Insights' },
+    { id: 'profit', label: 'Profit Intelligence' },
+    { id: 'forecast', label: 'Sales Forecast' },
+    { id: 'reorder', label: 'AI Reorder' },
+    { id: 'customers', label: 'Customer Insights' },
+  ]
+
   return (
-    <Pane title="Reports">
-      {error ? <p className="g-error">{error}</p> : null}
-      <div className="g-methods wrap">
-        {(['sales', 'stock', 'voids', 'credit', 'reorder'] as const).map((item) => (
+    <section className="products-screen">
+      <header className="products-title">
+        <h1>Reports</h1>
+      </header>
+      <div className="products-tabs" role="tablist">
+        {(['sales', 'stock', 'voids', 'tax', 'credit'] as const).map((item) => (
           <button key={item} type="button" className={tab === item ? 'on' : ''} onClick={() => setTab(item)}>
-            {item === 'sales' ? 'Sales' : item === 'stock' ? 'Inventory' : item === 'voids' ? 'Voids' : item === 'credit' ? 'Credit' : 'Reorder'}
+            {item === 'sales' ? 'Sales' : item === 'stock' ? 'Inventory' : item === 'voids' ? 'Voids' : item === 'tax' ? 'Tax' : 'Credit'}
           </button>
         ))}
       </div>
-      {tab === 'sales' && summary ? (
-        <div className="desk-stats">
-          <p>Sales <strong>{money(summary.sales, store.currencySymbol)}</strong></p>
-          <p>Orders <strong>{summary.completedCount}</strong></p>
-          <p>Tax <strong>{money(summary.tax, store.currencySymbol)}</strong></p>
-          <p>Discount <strong>{money(summary.discount, store.currencySymbol)}</strong></p>
-          <p>Profit <strong>{money(summary.profit, store.currencySymbol)}</strong></p>
-          <p>Cash <strong>{money(summary.payments.cash, store.currencySymbol)}</strong></p>
-          <p>Card <strong>{money(summary.payments.card, store.currencySymbol)}</strong></p>
-          <p>UPI <strong>{money(summary.payments.upi, store.currencySymbol)}</strong></p>
-          <p>Credit <strong>{money(summary.payments.credit, store.currencySymbol)}</strong></p>
+      {error ? <p className="g-error products-error">{error}</p> : null}
+      {tab === 'sales' ? (
+        <div className="insight-row">
+          {insights.map((item) => (
+            <button key={item.id} type="button" className={insight === item.id ? 'insight-chip on' : 'insight-chip'} onClick={() => setInsight(item.id)}>
+              {item.label}
+            </button>
+          ))}
         </div>
       ) : null}
-      {tab === 'stock' ? (
-        <ul className="desk-list">
-          {low.length === 0 ? <li><span>Stock is above the reorder points.</span></li> : null}
-          {low.map((row) => (
-            <li key={row.id}><strong>{row.name}</strong><span>{row.stock_qty} {row.unit}</span></li>
-          ))}
-        </ul>
+      {tab === 'sales' || tab === 'voids' || tab === 'tax' ? (
+        <>
+          <div className="date-row">
+            {ranges.map((item) => (
+              <button key={item.id} type="button" className={kind === item.id ? 'date-chip on' : 'date-chip'} onClick={() => setKind(item.id)}>
+                {kind === item.id ? '✓ ' : ''}{item.label}
+              </button>
+            ))}
+          </div>
+          {kind === 'custom' ? (
+            <div className="date-custom">
+              <label>From<input type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} /></label>
+              <label>To<input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} /></label>
+            </div>
+          ) : null}
+        </>
       ) : null}
-      {tab === 'voids' ? (
-        <ul className="desk-list">
-          {voids.length === 0 ? <li><span>No voids or refunds today.</span></li> : null}
-          {voids.map((row) => (
-            <li key={row.id}><strong>{row.product_name}</strong><span>{row.type} · {row.quantity}</span></li>
-          ))}
-        </ul>
-      ) : null}
-      {tab === 'credit' ? (
-        <ul className="desk-list">
-          {credit.length === 0 ? <li><span>No credit balances.</span></li> : null}
-          {credit.map((row) => (
-            <li key={row.id}><strong>{row.name}</strong><span>{money(row.credit_balance, store.currencySymbol)}</span></li>
-          ))}
-        </ul>
-      ) : null}
-      {tab === 'reorder' ? (
-        <ul className="desk-list">
-          {reorder.length === 0 ? <li><span>Nothing to reorder.</span></li> : null}
-          {reorder.map((product) => (
-            <li key={product.id}>
-              <strong>{product.name}</strong>
-              <span>On hand {product.stockQty}. Suggest buying {product.reorderQty || product.reorderPoint} {product.unit}.</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </Pane>
+      <div className="products-body">
+        {tab === 'sales' && insight === 'overview' ? (
+          <>
+            <div className="report-kpis">
+              <article><strong>{money(sales, store.currencySymbol)}</strong><span>Total Revenue</span></article>
+              <article><strong>{orders}</strong><span>Total Orders</span></article>
+              <article><strong>{money(average, store.currencySymbol)}</strong><span>Avg Order Value</span></article>
+              <article><strong>{money(summary?.tax ?? 0, store.currencySymbol)}</strong><span>Total Tax</span></article>
+            </div>
+            <h2>Daily Sales</h2>
+            {orders === 0 ? (
+              <div className="report-empty">
+                <strong>No sales data</strong>
+                <p>No completed orders in this period.</p>
+              </div>
+            ) : (
+              <ul className="report-bars">
+                {(summary?.days ?? []).filter((day) => day.total > 0).map((day) => (
+                  <li key={day.key}>
+                    <span>{day.label}</span>
+                    <span className="bar"><i style={{ width: `${Math.max(8, (day.total / Math.max(...(summary?.days ?? []).map((row) => row.total), 1)) * 100)}%` }} /></span>
+                    <strong>{money(day.total, store.currencySymbol)}</strong>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <h2>Payment Methods</h2>
+            {paid === 0 ? (
+              <div className="report-empty">
+                <strong>No payment data</strong>
+                <p>No completed orders in this period.</p>
+              </div>
+            ) : (
+              <ul className="studio-list">
+                <li><strong>Cash</strong><span>{money(summary?.payments.cash ?? 0, store.currencySymbol)}</span></li>
+                <li><strong>Card</strong><span>{money(summary?.payments.card ?? 0, store.currencySymbol)}</span></li>
+                <li><strong>UPI</strong><span>{money(summary?.payments.upi ?? 0, store.currencySymbol)}</span></li>
+                <li><strong>Credit</strong><span>{money(summary?.payments.credit ?? 0, store.currencySymbol)}</span></li>
+              </ul>
+            )}
+            <h2>Top Products</h2>
+            {(summary?.topItems.length ?? 0) === 0 ? (
+              <div className="report-empty">
+                <strong>No product sales</strong>
+                <p>No completed orders in this period.</p>
+              </div>
+            ) : (
+              <ul className="studio-list">
+                {summary?.topItems.map((item) => (
+                  <li key={item.name}>
+                    <strong>{item.name}</strong>
+                    <span>{item.quantity} sold · {money(item.total, store.currencySymbol)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        ) : null}
+        {tab === 'sales' && insight === 'profit' ? (
+          <div className="report-kpis">
+            <article><strong>{money(summary?.profit ?? 0, store.currencySymbol)}</strong><span>Profit</span></article>
+            <article><strong>{money(summary?.cost ?? 0, store.currencySymbol)}</strong><span>Cost</span></article>
+            <article><strong>{money(summary?.discount ?? 0, store.currencySymbol)}</strong><span>Discount</span></article>
+            <article><strong>{money(sales, store.currencySymbol)}</strong><span>Revenue</span></article>
+          </div>
+        ) : null}
+        {tab === 'sales' && insight === 'forecast' ? (
+          <div className="report-empty">
+            <strong>{orders === 0 ? 'No sales data' : money(average, store.currencySymbol)}</strong>
+            <p>{orders === 0 ? 'No completed orders in this period.' : 'Average sale in this period. Use a longer date range for a steadier read.'}</p>
+          </div>
+        ) : null}
+        {tab === 'sales' && insight === 'reorder' ? (
+          <ul className="studio-list">
+            {reorder.length === 0 ? <li><span>Nothing to reorder.</span></li> : null}
+            {reorder.map((product) => (
+              <li key={product.id}>
+                <div>
+                  <strong>{product.name}</strong>
+                  <span>On hand {product.stockQty}. Suggest buying {product.reorderQty || product.reorderPoint} {product.unit}.</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {tab === 'sales' && insight === 'customers' ? (
+          <ul className="studio-list">
+            {credit.length === 0 ? <li><span>No customer credit balances.</span></li> : null}
+            {credit.map((row) => (
+              <li key={row.id}><strong>{row.name}</strong><span>{money(row.credit_balance, store.currencySymbol)}</span></li>
+            ))}
+          </ul>
+        ) : null}
+        {tab === 'stock' ? (
+          <ul className="studio-list">
+            {low.length === 0 ? <li><span>Stock is above the reorder points.</span></li> : null}
+            {low.map((row) => (
+              <li key={row.id}><strong>{row.name}</strong><span>{row.stock_qty} {row.unit}</span></li>
+            ))}
+          </ul>
+        ) : null}
+        {tab === 'voids' ? (
+          voids.length === 0 ? (
+            <div className="report-empty">
+              <strong>No voids in this period</strong>
+              <p>Refunds and voids will show here.</p>
+            </div>
+          ) : (
+            <ul className="studio-list">
+              {voids.map((row) => (
+                <li key={row.id}><strong>{row.product_name}</strong><span>{row.type} · {row.quantity}</span></li>
+              ))}
+            </ul>
+          )
+        ) : null}
+        {tab === 'tax' ? (
+          <div className="report-kpis">
+            <article><strong>{money(summary?.tax ?? 0, store.currencySymbol)}</strong><span>Tax collected</span></article>
+            <article><strong>{Math.round(store.taxRate * 10000) / 100}%</strong><span>Store tax rate</span></article>
+          </div>
+        ) : null}
+        {tab === 'credit' ? (
+          <ul className="studio-list">
+            {credit.length === 0 ? <li><span>No credit balances.</span></li> : null}
+            {credit.map((row) => (
+              <li key={row.id}><strong>{row.name}</strong><span>{money(row.credit_balance, store.currencySymbol)}</span></li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    </section>
   )
 }
 
@@ -1411,6 +1583,10 @@ function SettingsPane({
   const [counted, setCounted] = useState('')
   const [error, setError] = useState('')
   const [saved, setSaved] = useState('')
+  const [syncedAt, setSyncedAt] = useState(() => new Date().toISOString())
+  const [tagline, setTagline] = useState(() => localStorage.getItem(`mentura-tagline-${store.id}`) ?? '')
+  const [editing, setEditing] = useState<null | 'name' | 'tagline' | 'address' | 'phone' | 'currency' | 'tax'>(null)
+  const [draft, setDraft] = useState('')
 
   useEffect(() => {
     Promise.all([loadDeskPromotions(client, store.id), loadOpenShift(client, store.id)])
@@ -1421,30 +1597,129 @@ function SettingsPane({
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not load settings'))
   }, [client, store.id])
 
+  const code = menturaCode(store.id)
+  const fields = { name, tagline, address, phone, currency, tax }
+
+  function openField(field: NonNullable<typeof editing>) {
+    setDraft(fields[field])
+    setEditing(field)
+    setSaved('')
+  }
+
+  function saveField() {
+    if (!editing) return
+    if (editing === 'tagline') {
+      localStorage.setItem(`mentura-tagline-${store.id}`, draft.trim())
+      setTagline(draft.trim())
+      setEditing(null)
+      setSaved('Tagline saved on this till')
+      return
+    }
+    const next = {
+      name: editing === 'name' ? draft : name,
+      address: editing === 'address' ? draft : address,
+      phone: editing === 'phone' ? draft : phone,
+      currency: editing === 'currency' ? draft : currency,
+      taxPercent: Number(editing === 'tax' ? draft : tax) || 0,
+    }
+    saveStoreProfile(client, store, next)
+      .then(() => {
+        setName(next.name)
+        setAddress(next.address)
+        setPhone(next.phone)
+        setCurrency(next.currency)
+        setTax(String(next.taxPercent))
+        setEditing(null)
+        setSaved('Shop details saved')
+        onChanged()
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not save the shop'))
+  }
+
   return (
-    <Pane title="Settings">
-      {error ? <p className="g-error">{error}</p> : null}
-      {saved ? <p className="g-ok">{saved}</p> : null}
-      <form
-        className="desk-form"
-        onSubmit={(event) => {
-          event.preventDefault()
-          saveStoreProfile(client, store, { name, address, phone, currency, taxPercent: Number(tax) || 0 })
-            .then(() => {
-              setSaved('Shop details saved')
-              onChanged()
-            })
-            .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not save the shop'))
-        }}
-      >
-        <label>Shop name<input value={name} onChange={(event) => setName(event.target.value)} /></label>
-        <label>Address<input value={address} onChange={(event) => setAddress(event.target.value)} /></label>
-        <label>Phone<input value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
-        <label>Currency<input value={currency} onChange={(event) => setCurrency(event.target.value)} /></label>
-        <label>Tax %<input inputMode="decimal" value={tax} onChange={(event) => setTax(event.target.value)} /></label>
-        <button type="submit" className="g-pay">Save shop</button>
-      </form>
-      <h2>Shift</h2>
+    <section className="products-screen">
+      <header className="products-title">
+        <h1>Settings</h1>
+      </header>
+      <div className="products-body settings-page">
+        {error ? <p className="g-error">{error}</p> : null}
+        {saved ? <p className="g-ok">{saved}</p> : null}
+        <p className="settings-kicker">Account & billing</p>
+        <div className="settings-row">
+          <div>
+            <strong>Mentura ID</strong>
+            <span>{code}</span>
+          </div>
+          <button type="button" aria-label="Copy Mentura ID" onClick={() => {
+            navigator.clipboard?.writeText(code).then(() => setSaved('Mentura ID copied')).catch(() => setSaved(code))
+          }}>Copy</button>
+        </div>
+        <div className="settings-row">
+          <div>
+            <strong>Current plan</strong>
+            <span>Free</span>
+          </div>
+        </div>
+        <div className="settings-row">
+          <div>
+            <strong>Devices</strong>
+            <span>1 / 1 active</span>
+          </div>
+        </div>
+        <p className="settings-sync">Last synced: {formatWhen(syncedAt, store.timezone)}</p>
+        <button
+          type="button"
+          className="settings-outline"
+          onClick={() => {
+            setSyncedAt(new Date().toISOString())
+            setSaved('License checked')
+            onChanged()
+          }}
+        >
+          Refresh license
+        </button>
+        <a className="products-add wide settings-plan" href="https://menturapos.com" target="_blank" rel="noreferrer">
+          Manage plan at menturapos.com
+        </a>
+        <div className="settings-row">
+          <div>
+            <strong>Link another device</strong>
+            <span>Requires a multi-device plan</span>
+          </div>
+        </div>
+        <p className="settings-kicker">Store</p>
+        <div className="settings-row">
+          <div>
+            <strong>Manage stores</strong>
+            <span>{name || store.name} — add branches or switch</span>
+          </div>
+        </div>
+        <button type="button" className="settings-row" onClick={() => openField('name')}>
+          <div><strong>Store name</strong><span>{name || 'Not set'}</span></div>
+          <span className="pencil" aria-hidden="true">✎</span>
+        </button>
+        <button type="button" className="settings-row" onClick={() => openField('tagline')}>
+          <div><strong>Store tagline</strong><span>{tagline || 'Not set'}</span></div>
+          <span className="pencil" aria-hidden="true">✎</span>
+        </button>
+        <button type="button" className="settings-row" onClick={() => openField('address')}>
+          <div><strong>Store address</strong><span>{address || 'Not set'}</span></div>
+          <span className="pencil" aria-hidden="true">✎</span>
+        </button>
+        <button type="button" className="settings-row" onClick={() => openField('phone')}>
+          <div><strong>Store phone</strong><span>{phone || 'Not set'}</span></div>
+          <span className="pencil" aria-hidden="true">✎</span>
+        </button>
+        <button type="button" className="settings-row" onClick={() => openField('currency')}>
+          <div><strong>Currency</strong><span>{currency || store.currencySymbol}</span></div>
+          <span className="pencil" aria-hidden="true">✎</span>
+        </button>
+        <button type="button" className="settings-row" onClick={() => openField('tax')}>
+          <div><strong>Tax %</strong><span>{tax || '0'}</span></div>
+          <span className="pencil" aria-hidden="true">✎</span>
+        </button>
+        <p className="settings-kicker">Till</p>
+        <h2>Shift</h2>
       {shift ? (
         <form
           className="desk-form"
@@ -1503,6 +1778,34 @@ function SettingsPane({
           <li key={promo.id}><strong>{promo.name}</strong><span>{promo.value}% · {promo.active ? 'Active' : 'Off'}</span></li>
         ))}
       </ul>
-    </Pane>
+      </div>
+      {editing ? (
+        <div className="g-sheet-wrap" role="presentation" onClick={() => setEditing(null)}>
+          <form
+            className="g-sheet"
+            onClick={(event) => event.stopPropagation()}
+            onSubmit={(event) => {
+              event.preventDefault()
+              saveField()
+            }}
+          >
+            <header className="g-sheet-head">
+              <h2>{editing === 'name' ? 'Store name' : editing === 'tagline' ? 'Store tagline' : editing === 'address' ? 'Store address' : editing === 'phone' ? 'Store phone' : editing === 'currency' ? 'Currency' : 'Tax %'}</h2>
+              <button type="button" className="grocery-close" onClick={() => setEditing(null)}>Close</button>
+            </header>
+            <label className="desk-field">
+              Value
+              <input value={draft} onChange={(event) => setDraft(event.target.value)} />
+            </label>
+            <button type="submit" className="g-pay">Save</button>
+          </form>
+        </div>
+      ) : null}
+    </section>
   )
+}
+
+function menturaCode(storeId: string): string {
+  const raw = storeId.replace(/-/g, '').toUpperCase()
+  return `MNT-${raw.slice(0, 4)}-${raw.slice(4, 8)}`
 }
