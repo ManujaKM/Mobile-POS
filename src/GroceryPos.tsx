@@ -262,7 +262,7 @@ export function GroceryPos({
       <main className="grocery-gate">
         <section>
           <h1>{stores.length === 0 ? 'No shop yet' : 'Choose a shop'}</h1>
-          <p>{stores.length === 0 ? 'The shop could not be opened. Sign out and choose a category again.' : 'This account has more than one shop.'}</p>
+          <p>{stores.length === 0 ? 'The shop could not be opened. Switch category and try again.' : 'This till has more than one shop.'}</p>
           {loadError ? <p className="g-error">{loadError}</p> : null}
           {stores.map((row) => (
             <button key={row.id} type="button" className="g-pay" onClick={() => setStoreId(row.id)}>
@@ -270,7 +270,7 @@ export function GroceryPos({
             </button>
           ))}
           <button type="button" className="grocery-link" onClick={onSignOut}>
-            Sign out
+            Switch category
           </button>
         </section>
       </main>
@@ -349,7 +349,7 @@ export function GroceryPos({
             Portal
           </button>
           <button type="button" className="grocery-link" onClick={onSignOut}>
-            Sign out
+            Switch category
           </button>
         </div>
       </header>
@@ -841,11 +841,9 @@ export function GroceryPos({
 
 export function CategoryPick({
   client,
-  onSignOut,
   onChoose,
 }: {
   client: SupabaseClient
-  onSignOut: () => void
   onChoose: (category: ShopCategory) => void
 }) {
   const [busy, setBusy] = useState<ShopCategory | null>(null)
@@ -876,7 +874,7 @@ export function CategoryPick({
     <main className="category-pick">
       <header>
         <h1>Choose your category</h1>
-        <p>Pick the kind of shop you are opening. You can sign out and choose again later.</p>
+        <p>Pick the kind of shop you are opening. You can switch category later.</p>
       </header>
       {error ? <p className="g-error">{error}</p> : null}
       <div className="category-grid">
@@ -887,9 +885,6 @@ export function CategoryPick({
           </button>
         ))}
       </div>
-      <button type="button" className="grocery-link" onClick={onSignOut}>
-        Sign out
-      </button>
     </main>
   )
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   loadCreditCustomers,
@@ -11,6 +11,7 @@ import {
   type VoidRow,
 } from './data'
 import groceryLogo from './assets/grocery-logo.png'
+import textileLogo from './assets/textile-logo.png'
 import { GroceryPos } from './GroceryPos'
 import {
   adjustDeskStock,
@@ -48,7 +49,7 @@ import {
   type DeskShift,
   type DeskSupplier,
 } from './groceryDesk'
-import { loadGroceryCatalog, loadGroceryStores, money, type GroceryCategory, type GroceryStore, type ShopCategory } from './grocery'
+import { loadGroceryCatalog, loadGroceryStores, money, type GroceryCategory, type GroceryStore } from './grocery'
 import { readRememberedStore, writeRememberedStore } from './prefs'
 import { formatWhen, periodWindow, todayYmd } from './time'
 import './grocery.css'
@@ -61,10 +62,12 @@ export function GroceryHome({
   client,
   onSignOut,
   onOpenPortal,
+  category = 'grocery',
 }: {
   client: SupabaseClient
   onSignOut: () => void
   onOpenPortal: () => void
+  category?: 'grocery' | 'textile'
 }) {
   const [section, setSection] = useState<Section>('pos')
   const [store, setStore] = useState<GroceryStore | null>(null)
@@ -96,15 +99,18 @@ export function GroceryHome({
     setSection(next)
   }
 
+  const catalog = category === 'textile' ? 'Fabrics' : 'Products'
+  const logo = category === 'textile' ? textileLogo : groceryLogo
+
   return (
-    <div className="grocery-home" data-category="grocery">
+    <div className="grocery-home" data-category={category}>
       <aside className="grocery-side">
         <div className="grocery-side-logo">
-          <img src={groceryLogo} alt="Mentura POS" />
+          <img src={logo} alt="Mentura POS" />
         </div>
-        <nav className="grocery-nav" aria-label="Grocery sections">
+        <nav className="grocery-nav" aria-label={category === 'textile' ? 'Textile sections' : 'Grocery sections'}>
           <NavButton current={section} id="pos" label="POS" icon="pos" onOpen={open} />
-          <NavButton current={section} id="products" label="Products" icon="products" onOpen={open} />
+          <NavButton current={section} id="products" label={catalog} icon={category === 'textile' ? 'fabrics' : 'products'} onOpen={open} />
           <NavButton current={section} id="buying" label="Procurement" icon="buy" onOpen={open} />
           <NavButton current={section} id="orders" label="Orders" icon="orders" onOpen={open} />
           <NavButton current={section} id="customers" label="Customers" icon="customers" onOpen={open} />
@@ -116,8 +122,8 @@ export function GroceryHome({
         <button type="button" className="grocery-switch" onClick={onSignOut}>
           <NavGlyph name="switch" />
           <span>
-            <strong>Admin</strong>
-            Sign out
+            <strong>Shop</strong>
+            Switch category
           </span>
         </button>
       </aside>
@@ -125,7 +131,7 @@ export function GroceryHome({
         {section === 'pos' ? (
           <GroceryPos
             client={client}
-            category={'grocery' satisfies ShopCategory}
+            category={category}
             onSignOut={onSignOut}
             onOpenPortal={onOpenPortal}
             docked
@@ -134,7 +140,7 @@ export function GroceryHome({
         ) : null}
         {section !== 'pos' && !store ? <p className="grocery-empty">{error || 'Opening the shop…'}</p> : null}
         {section === 'products' && store ? (
-          <ProductsPane client={client} store={store} onChanged={() => setRevision((value) => value + 1)} />
+          <ProductsPane client={client} store={store} catalog={catalog} onChanged={() => setRevision((value) => value + 1)} />
         ) : null}
         {section === 'buying' && store ? (
           <BuyingPane client={client} store={store} onChanged={() => setRevision((value) => value + 1)} />
@@ -195,6 +201,13 @@ function NavGlyph({ name }: { name: string }) {
       </svg>
     )
   }
+  if (name === 'fabrics') {
+    return (
+      <svg {...common}>
+        <path fill="currentColor" d="M12 3 8 8h3v11h2V8h3L12 3zm-6 9v2h4v6H6v2h12v-2h-4v-6h4v-2H6z" />
+      </svg>
+    )
+  }
   if (name === 'buy') {
     return (
       <svg {...common}>
@@ -251,39 +264,244 @@ function NavGlyph({ name }: { name: string }) {
   )
 }
 
-function AssistantPane({ client, store }: { client: SupabaseClient; store: GroceryStore }) {
-  const [answer, setAnswer] = useState('')
-  const [error, setError] = useState('')
+const ASSISTANT_PROMPTS = [
+  'What were my best-selling products last month?',
+  'How much revenue did I make this week?',
+  'Which products are running low on stock?',
+  'Who are my most loyal customers?',
+  "What's my average profit margin?",
+  'Which day of the week has highest sales?',
+]
 
-  async function ask() {
-    setError('')
-    const range = periodWindow('today', store.timezone, '', '')
-    if (!range) return
-    const [summary, low] = await Promise.all([
-      loadPeriodSummary(client, store.id, range, store.timezone),
-      loadLowStock(client, store.id),
-    ])
-    setAnswer(
-      `Today's sales are ${money(summary.sales, store.currencySymbol)} from ${summary.completedCount} completed orders. Profit is ${money(summary.profit, store.currencySymbol)}. ${low.length} products are at or below the reorder point.`,
-    )
+type ChatLine = {
+  id: string
+  role: 'user' | 'assistant'
+  text: string
+  suggestions: string[]
+}
+
+function AssistantPane({ client, store }: { client: SupabaseClient; store: GroceryStore }) {
+  const [messages, setMessages] = useState<ChatLine[]>([])
+  const [draft, setDraft] = useState('')
+  const [thinking, setThinking] = useState(false)
+  const [note, setNote] = useState('')
+  const thread = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const node = thread.current
+    if (node) node.scrollTop = node.scrollHeight
+  }, [messages, thinking])
+
+  async function send(text: string) {
+    const question = text.trim()
+    if (!question || thinking) return
+    setDraft('')
+    setNote('')
+    setMessages((current) => [...current, { id: crypto.randomUUID(), role: 'user', text: question, suggestions: [] }])
+    setThinking(true)
+    try {
+      const reply = await answerShop(client, store, question)
+      setMessages((current) => [
+        ...current,
+        { id: crypto.randomUUID(), role: 'assistant', text: reply.text, suggestions: reply.suggestions },
+      ])
+    } catch (err: unknown) {
+      setMessages((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          text: err instanceof Error ? err.message : 'Could not answer that just now.',
+          suggestions: [],
+        },
+      ])
+    } finally {
+      setThinking(false)
+    }
   }
 
   return (
-    <Pane title="AI Assistant">
-      <p>Ask about today's sales, profit, and stock that needs reordering.</p>
-      {error ? <p className="g-error">{error}</p> : null}
-      <button
-        type="button"
-        className="g-pay"
-        onClick={() => {
-          ask().catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not answer'))
+    <section className="products-screen assistant-screen">
+      <header className="products-title split">
+        <h1>AI Assistant</h1>
+        {messages.length > 0 ? (
+          <button type="button" className="chat-clear" onClick={() => setMessages([])}>
+            Clear chat
+          </button>
+        ) : null}
+      </header>
+      <div className="assistant-thread" ref={thread}>
+        {messages.length === 0 ? (
+          <div className="assistant-empty">
+            <span className="assistant-spark" aria-hidden="true">✦</span>
+            <strong>AI Assistant</strong>
+            <p>Ask anything about your store. Try one of these:</p>
+            <div className="assistant-prompts">
+              {ASSISTANT_PROMPTS.map((prompt) => (
+                <button key={prompt} type="button" onClick={() => send(prompt)}>
+                  <span aria-hidden="true">💬</span>
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="chat-list">
+            {messages.map((message) =>
+              message.role === 'user' ? (
+                <p key={message.id} className="chat-user">{message.text}</p>
+              ) : (
+                <div key={message.id} className="chat-bot">
+                  <span className="chat-avatar" aria-hidden="true">✦</span>
+                  <div>
+                    <p>{message.text}</p>
+                    {message.suggestions.length > 0 ? (
+                      <div className="chat-suggestions">
+                        {message.suggestions.map((suggestion) => (
+                          <button key={suggestion} type="button" onClick={() => send(suggestion)}>{suggestion}</button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ),
+            )}
+            {thinking ? (
+              <div className="chat-bot">
+                <span className="chat-avatar" aria-hidden="true">✦</span>
+                <p className="chat-thinking" aria-label="Thinking">Thinking</p>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </div>
+      {note ? <p className="chat-note">{note}</p> : null}
+      <form
+        className="chat-bar"
+        onSubmit={(event) => {
+          event.preventDefault()
+          send(draft).catch(() => setNote('Could not send that question'))
         }}
       >
-        How is the shop today?
-      </button>
-      {answer ? <p className="desk-answer">{answer}</p> : null}
-    </Pane>
+        <button type="button" className="icon-btn" aria-label="Voice input" onClick={() => setNote('Voice coming soon')}>
+          Mic
+        </button>
+        <input
+          value={draft}
+          placeholder="Ask about your store…"
+          disabled={thinking}
+          onChange={(event) => setDraft(event.target.value)}
+        />
+        <button type="submit" className="chat-send" disabled={thinking || draft.trim().length === 0} aria-label="Send">
+          Send
+        </button>
+      </form>
+    </section>
   )
+}
+
+async function answerShop(
+  client: SupabaseClient,
+  store: GroceryStore,
+  question: string,
+): Promise<{ text: string; suggestions: string[] }> {
+  const asked = question.trim().toLowerCase()
+  const symbol = store.currencySymbol
+  const suggestions = ASSISTANT_PROMPTS.filter((prompt) => prompt.toLowerCase() !== asked).slice(0, 3)
+  if (asked.includes('low') || asked.includes('stock') || asked.includes('reorder')) {
+    const low = await loadLowStock(client, store.id)
+    return {
+      text: low.length === 0
+        ? 'No products are at or below the reorder point.'
+        : `${low.length} products need attention: ${low.slice(0, 6).map((row) => `${row.name} (${row.stock_qty} ${row.unit})`).join(', ')}.`,
+      suggestions,
+    }
+  }
+  if (asked.includes('loyal') || asked.includes('customer')) {
+    const customers = await loadDeskCustomers(client, store.id)
+    const ranked = customers.filter((customer) => customer.totalSpent > 0).sort((a, b) => b.totalSpent - a.totalSpent)
+    return {
+      text: ranked.length === 0
+        ? 'No customers with recorded purchases yet.'
+        : `Most loyal customers by spend: ${ranked.slice(0, 5).map((customer) => `${customer.name} (${money(customer.totalSpent, symbol)})`).join(', ')}.`,
+      suggestions,
+    }
+  }
+  if (asked.includes('best') || (asked.includes('product') && asked.includes('month'))) {
+    const range = lastMonthRange(store.timezone)
+    if (!range) return { text: 'I could not read last month.', suggestions }
+    const summary = await loadPeriodSummary(client, store.id, range, store.timezone)
+    return {
+      text: summary.topItems.length === 0
+        ? 'No product sales last month.'
+        : `Best sellers last month: ${summary.topItems.slice(0, 5).map((item) => `${item.name} (${item.quantity} sold, ${money(item.total, symbol)})`).join(', ')}.`,
+      suggestions,
+    }
+  }
+  if (asked.includes('margin') || asked.includes('profit')) {
+    const range = periodWindow('month', store.timezone, '', '')
+    if (!range) return { text: 'I could not read this month.', suggestions }
+    const summary = await loadPeriodSummary(client, store.id, range, store.timezone)
+    if (summary.sales <= 0) return { text: 'No completed sales this month, so there is no profit margin yet.', suggestions }
+    const margin = (summary.profit / summary.sales) * 100
+    return {
+      text: `This month, profit is ${money(summary.profit, symbol)} on ${money(summary.sales, symbol)} in sales. That is a ${margin.toFixed(1)}% margin.`,
+      suggestions,
+    }
+  }
+  if (asked.includes('day of the week') || asked.includes('which day') || asked.includes('highest sales')) {
+    const range = periodWindow('month', store.timezone, '', '')
+    if (!range) return { text: 'I could not read this month.', suggestions }
+    const summary = await loadPeriodSummary(client, store.id, range, store.timezone)
+    const totals = new Map<string, number>()
+    for (const day of summary.days) {
+      const name = weekdayOf(day.key)
+      totals.set(name, (totals.get(name) ?? 0) + day.total)
+    }
+    let best = ''
+    let amount = 0
+    for (const [name, total] of totals) {
+      if (total > amount) {
+        best = name
+        amount = total
+      }
+    }
+    return {
+      text: amount <= 0
+        ? 'No sales this month, so no weekday stands out yet.'
+        : `${best} has the highest sales this month, at ${money(amount, symbol)}.`,
+      suggestions,
+    }
+  }
+  const aboutWeek = asked.includes('week') || asked.includes('revenue')
+  const range = aboutWeek
+    ? periodWindow('week', store.timezone, '', '')
+    : periodWindow('today', store.timezone, '', '')
+  if (!range) return { text: 'I could not read that period.', suggestions }
+  const summary = await loadPeriodSummary(client, store.id, range, store.timezone)
+  const label = aboutWeek ? 'This week' : 'Today'
+  const intro = aboutWeek || asked.includes('today') || asked.includes('sales') ? '' : 'I answer from your shop records. '
+  const orders = summary.completedCount === 1 ? '1 completed order' : `${summary.completedCount} completed orders`
+  return {
+    text: `${intro}${label}'s revenue is ${money(summary.sales, symbol)} from ${orders}. Profit is ${money(summary.profit, symbol)}.`,
+    suggestions,
+  }
+}
+
+function lastMonthRange(zone: string) {
+  const today = todayYmd(zone)
+  const [year, month] = today.split('-').map(Number)
+  const startYear = month === 1 ? (year || 1970) - 1 : year
+  const startMonth = month === 1 ? 12 : (month || 1) - 1
+  const start = `${startYear}-${String(startMonth).padStart(2, '0')}-01`
+  const end = shiftYmd(`${year}-${String(month).padStart(2, '0')}-01`, -1)
+  return periodWindow('custom', zone, start, end)
+}
+
+function weekdayOf(ymd: string): string {
+  const [year, month, day] = ymd.split('-').map(Number)
+  const names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  return names[new Date(Date.UTC(year || 1970, (month || 1) - 1, day || 1)).getUTCDay()] ?? 'Sunday'
 }
 
 function ContactPane() {
@@ -333,24 +551,15 @@ function ContactPane() {
   )
 }
 
-function Pane({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="grocery-desk">
-      <header>
-        <h1>{title}</h1>
-      </header>
-      {children}
-    </section>
-  )
-}
-
 function ProductsPane({
   client,
   store,
+  catalog,
   onChanged,
 }: {
   client: SupabaseClient
   store: GroceryStore
+  catalog: string
   onChanged: () => void
 }) {
   const [products, setProducts] = useState<DeskProduct[]>([])
@@ -386,12 +595,12 @@ function ProductsPane({
   return (
     <section className="products-screen">
       <header className="products-title">
-        <h1>{tab === 'inventory' ? 'Inventory' : 'Products'}</h1>
+        <h1>{tab === 'inventory' ? 'Inventory' : catalog}</h1>
       </header>
       <div className="products-tabs" role="tablist">
         <button type="button" className={tab === 'products' ? 'on' : ''} onClick={() => { setTab('products'); setQuery('') }}>
-          <TabGlyph name="products" />
-          Products
+          <TabGlyph name={catalog === 'Fabrics' ? 'fabrics' : 'products'} />
+          {catalog}
         </button>
         <button type="button" className={tab === 'categories' ? 'on' : ''} onClick={() => { setTab('categories'); setQuery('') }}>
           <TabGlyph name="categories" />
@@ -410,7 +619,7 @@ function ProductsPane({
               <span className="sr">Search products or scan a barcode</span>
               <input
                 value={query}
-                placeholder="Search products or scan barcode..."
+                placeholder={catalog === 'Fabrics' ? 'Search fabrics or scan barcode...' : 'Search products or scan barcode...'}
                 onChange={(event) => setQuery(event.target.value)}
               />
               <span className="scan-mark" aria-hidden="true">▦</span>
@@ -572,7 +781,7 @@ function ProductsPane({
   )
 }
 
-function TabGlyph({ name }: { name: 'products' | 'categories' | 'inventory' }) {
+function TabGlyph({ name }: { name: 'products' | 'fabrics' | 'categories' | 'inventory' }) {
   const common = { viewBox: '0 0 24 24', 'aria-hidden': true as const }
   if (name === 'categories') {
     return (
@@ -585,6 +794,13 @@ function TabGlyph({ name }: { name: 'products' | 'categories' | 'inventory' }) {
     return (
       <svg {...common}>
         <path fill="currentColor" d="M3 10 12 4l9 6v9H3v-9zm2 1.2V17h14v-5.8l-7-4.6-7 4.6z" />
+      </svg>
+    )
+  }
+  if (name === 'fabrics') {
+    return (
+      <svg {...common}>
+        <path fill="currentColor" d="M12 3 8 8h3v11h2V8h3L12 3zm-6 9v2h4v6H6v2h12v-2h-4v-6h4v-2H6z" />
       </svg>
     )
   }

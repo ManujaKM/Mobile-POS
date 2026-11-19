@@ -1,9 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import type { Session, SupabaseClient } from '@supabase/supabase-js'
+import { useEffect, useState } from 'react'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import logoUrl from './assets/logo.png'
 import logoDarkUrl from './assets/logo-dark.png'
 import { getClient } from './client'
-import { readConfig } from './config'
 import {
   loadCreditCustomers,
   loadCustomers,
@@ -99,88 +98,15 @@ const emptySummary = (): PeriodSummary => ({
 
 export function App() {
   applyTheme(loadPrefs().theme)
-  const client = getClient()
-  const [session, setSession] = useState<Session | null>(null)
-  const [ready, setReady] = useState(false)
-  const [recovery, setRecovery] = useState(false)
-
-  useEffect(() => {
-    if (!client) {
-      setReady(true)
-      return
-    }
-    let active = true
-    client.auth.getSession().then(({ data }) => {
-      if (!active) return
-      setSession(data.session)
-      setReady(true)
-    })
-    const { data } = client.auth.onAuthStateChange((event, next) => {
-      setSession(next)
-      if (event === 'PASSWORD_RECOVERY') setRecovery(true)
-    })
-    return () => {
-      active = false
-      data.subscription.unsubscribe()
-    }
-  }, [client])
-
-  if (!ready) {
-    return (
-      <main className="gate">
-        <Preloader label="Opening Mentura POS" />
-        <Credit />
-      </main>
-    )
-  }
-
-  if (!client || !readConfig()) {
-    return (
-      <main className="gate">
-        <section className="card narrow">
-          <Mark />
-          <h1>Portal is not configured</h1>
-          <p>
-            Add the mentura-ops URL and public anon key to .env, then restart the site.
-          </p>
-        </section>
-        <Credit />
-      </main>
-    )
-  }
-
-  if (recovery) {
-    return <Recovery client={client} onDone={() => setRecovery(false)} />
-  }
-
-  if (!session) {
-    return <Login client={client} />
-  }
-
-  return (
-    <ShopHome
-      client={client}
-      email={session.user.email ?? ''}
-      onSignOut={() => {
-        void client.auth.signOut()
-      }}
-    />
-  )
+  return <ShopHome client={getClient()} />
 }
 
-function ShopHome({
-  client,
-  email,
-  onSignOut,
-}: {
-  client: SupabaseClient
-  email: string
-  onSignOut: () => void
-}) {
+function ShopHome({ client }: { client: SupabaseClient }) {
   const [category, setCategory] = useState<ShopCategory | null>(null)
   const [screen, setScreen] = useState<'pos' | 'portal'>('pos')
+  const leave = () => setCategory(null)
   if (!category) {
-    return <CategoryPick client={client} onSignOut={onSignOut} onChoose={setCategory} />
+    return <CategoryPick client={client} onChoose={setCategory} />
   }
   if (screen === 'portal') {
     return (
@@ -188,18 +114,18 @@ function ShopHome({
         <button type="button" className="portal-back" onClick={() => setScreen('pos')}>
           Back to till
         </button>
-        <Dashboard client={client} email={email} onSignOut={onSignOut} />
+        <Dashboard client={client} email="" onSignOut={leave} />
       </div>
     )
   }
-  if (category === 'grocery') {
-    return <GroceryHome client={client} onSignOut={onSignOut} onOpenPortal={() => setScreen('portal')} />
+  if (category === 'grocery' || category === 'textile') {
+    return <GroceryHome client={client} category={category} onSignOut={leave} onOpenPortal={() => setScreen('portal')} />
   }
   return (
     <GroceryPos
       client={client}
       category={category}
-      onSignOut={onSignOut}
+      onSignOut={leave}
       onOpenPortal={() => setScreen('portal')}
     />
   )
@@ -265,168 +191,6 @@ function NavIcon({ name }: { name: Tab }) {
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d={paths[name]} />
     </svg>
-  )
-}
-
-function Login({ client }: { client: SupabaseClient }) {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [mode, setMode] = useState<'sign-in' | 'reset' | 'sign-up'>('sign-in')
-
-  async function onSubmit(event: FormEvent) {
-    event.preventDefault()
-    setError('')
-    setNotice('')
-    setBusy(true)
-    try {
-      if (mode === 'reset') {
-        const redirectTo = window.location.href.split('#')[0]
-        const { error: resetError } = await client.auth.resetPasswordForEmail(email.trim(), { redirectTo })
-        if (resetError) throw resetError
-        setNotice('If that email is a Mentura Cloud account, a reset link is on its way.')
-        return
-      }
-      if (mode === 'sign-up') {
-        if (password.length < 6) throw new Error('Use a password of at least 6 characters')
-        const { data, error: signUpError } = await client.auth.signUp({
-          email: email.trim(),
-          password,
-        })
-        if (signUpError) throw signUpError
-        if (!data.session) {
-          setNotice('Account created. Confirm the email if Mentura Cloud asks, then sign in and choose a category.')
-          setMode('sign-in')
-        }
-        return
-      }
-      const { error: signInError } = await client.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      })
-      if (signInError) throw signInError
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign-in failed')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <main className="gate auth-screen">
-      <section className="card narrow">
-        <Mark />
-        <h1>{mode === 'sign-up' ? 'Create account' : mode === 'sign-in' ? 'Sign in' : 'Reset password'}</h1>
-        <p className="lede">
-          {mode === 'sign-up'
-            ? 'Use an email and password for this till. After sign-in, choose grocery, textile, or another category.'
-            : 'Use the email and password from Mentura Cloud on the shop till. Staff PIN codes stay on the till.'}
-        </p>
-        <form onSubmit={onSubmit} className="stack">
-          <label>
-            Email
-            <input
-              type="email"
-              autoComplete="username"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </label>
-          {mode === 'reset' ? null : (
-            <label>
-              Password
-              <input
-                type="password"
-                autoComplete={mode === 'sign-up' ? 'new-password' : 'current-password'}
-                required
-                minLength={mode === 'sign-up' ? 6 : undefined}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </label>
-          )}
-          {error ? <p className="error">{error}</p> : null}
-          {notice ? <p className="notice">{notice}</p> : null}
-          <button type="submit" className="primary" disabled={busy}>
-            {busy ? 'Please wait…' : mode === 'sign-up' ? 'Create account' : mode === 'sign-in' ? 'Sign in' : 'Send reset link'}
-          </button>
-        </form>
-        <button
-          type="button"
-          className="text"
-          onClick={() => {
-            setMode(mode === 'sign-in' ? 'sign-up' : 'sign-in')
-            setError('')
-            setNotice('')
-          }}
-        >
-          {mode === 'sign-in' ? 'Create account' : 'Back to sign in'}
-        </button>
-        {mode === 'sign-in' ? (
-          <button
-            type="button"
-            className="text"
-            onClick={() => {
-              setMode('reset')
-              setError('')
-              setNotice('')
-            }}
-          >
-            Forgot password
-          </button>
-        ) : null}
-      </section>
-      <Credit />
-    </main>
-  )
-}
-
-function Recovery({ client, onDone }: { client: SupabaseClient; onDone: () => void }) {
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  async function onSubmit(event: FormEvent) {
-    event.preventDefault()
-    setBusy(true)
-    setError('')
-    const { error: updateError } = await client.auth.updateUser({ password })
-    setBusy(false)
-    if (updateError) {
-      setError(updateError.message)
-      return
-    }
-    onDone()
-  }
-
-  return (
-    <main className="gate auth-screen">
-      <section className="card narrow">
-        <Mark />
-        <h1>Choose a new password</h1>
-        <form onSubmit={onSubmit} className="stack">
-          <label>
-            New password
-            <input
-              type="password"
-              autoComplete="new-password"
-              required
-              minLength={6}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          </label>
-          {error ? <p className="error">{error}</p> : null}
-          <button type="submit" className="primary" disabled={busy}>
-            {busy ? 'Saving…' : 'Save password'}
-          </button>
-        </form>
-      </section>
-      <Credit />
-    </main>
   )
 }
 
@@ -550,21 +314,25 @@ function Dashboard({
               </button>
             ))}
             <div className="more-account">
-              <p className="more-email" title={email}>
-                {email}
-              </p>
+              {email ? (
+                <p className="more-email" title={email}>
+                  {email}
+                </p>
+              ) : null}
               <button type="button" className="more-signout" onClick={onSignOut}>
-                Sign out
+                Switch category
               </button>
             </div>
           </div>
         ) : null}
         <div className="account">
-          <p className="email" title={email}>
-            {email}
-          </p>
+          {email ? (
+            <p className="email" title={email}>
+              {email}
+            </p>
+          ) : null}
           <button type="button" className="ghost" onClick={onSignOut}>
-            Sign out
+            Switch category
           </button>
         </div>
       </aside>
